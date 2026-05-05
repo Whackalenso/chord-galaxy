@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chord Palette</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#08080c;color:#fff;font-family:'Courier New',monospace;min-height:100vh;padding:32px}
+  h1{font-size:22px;letter-spacing:8px;text-transform:uppercase;font-weight:300;margin-bottom:6px}
+  .sub{font-size:11px;letter-spacing:3px;opacity:.4;text-transform:uppercase;margin-bottom:32px}
+  .group{margin-bottom:28px}
+  .group h2{font-size:12px;letter-spacing:4px;text-transform:uppercase;opacity:.7;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+  .swatch{width:10px;height:10px;border-radius:50%;border:2px solid}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+  button{
+    background:#15151c;color:#ddd;border:1px solid #2a2a36;
+    font:12px/1.4 'Courier New',monospace;padding:12px 14px;text-align:left;
+    cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+    border-radius:4px;letter-spacing:1px;
+  }
+  button:hover{background:#1d1d28;border-color:#444}
+  button.playing{background:#2a2a3a;color:#fff}
+  button.slot-a{border-color:#ddc878;box-shadow:0 0 0 1px #ddc878 inset;background:#1a1812}
+  button.slot-b{border-color:#8fa4c8;box-shadow:0 0 0 1px #8fa4c8 inset;background:#121620}
+  button .label{display:block;font-size:10px;opacity:.5;margin-bottom:4px;letter-spacing:2px;text-transform:uppercase}
+  button .notes{display:block;font-size:13px;letter-spacing:2px}
+  #start-overlay{position:fixed;inset:0;background:#08080c;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;cursor:pointer}
+  #start-overlay h1{font-size:30px;letter-spacing:10px;margin-bottom:8px}
+  #start-overlay p{font-size:11px;letter-spacing:3px;opacity:.4;text-transform:uppercase}
+  .stop-row{margin-top:24px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .stop-btn{background:#2a1517;color:#e88;border-color:#5a2a2c}
+  .stop-btn:hover{background:#3a1f22;border-color:#8a3a3c}
+  .src-tag{font-size:9px;letter-spacing:2px;opacity:.35;margin-left:6px}
+  #progress{font-size:11px;letter-spacing:3px;opacity:.55;text-transform:uppercase;margin-bottom:20px}
+  #progress strong{color:#ddc878;font-weight:normal}
+  #score-panel{
+    position:sticky;bottom:0;left:0;right:0;
+    background:#0d0d14;border:1px solid #2a2a36;border-radius:6px;
+    padding:14px 16px;margin-top:24px;display:none;flex-wrap:wrap;gap:14px;align-items:center;
+    box-shadow:0 -8px 24px rgba(0,0,0,0.6);
+  }
+  #score-panel.visible{display:flex}
+  .slot-display{display:flex;flex-direction:column;gap:2px;min-width:140px}
+  .slot-display .slot-tag{font-size:9px;letter-spacing:2px;opacity:.5;text-transform:uppercase}
+  .slot-display .slot-tag.a{color:#ddc878}
+  .slot-display .slot-tag.b{color:#8fa4c8}
+  .slot-display .slot-name{font-size:13px;letter-spacing:2px}
+  .slot-display .slot-notes{font-size:10px;opacity:.5;letter-spacing:1px}
+  .arrow{font-size:18px;opacity:.4}
+  .score-buttons{display:flex;gap:6px}
+  .score-btn{
+    background:#15151c;color:#ddd;border:1px solid #2a2a36;
+    padding:10px 16px;font:13px 'Courier New',monospace;letter-spacing:2px;
+    cursor:pointer;border-radius:4px;
+  }
+  .score-btn:hover{background:#1d1d28;border-color:#666}
+  .score-btn.current{border-color:#ddc878;color:#ddc878}
+  .score-btn.flash{background:#1f3a1f;border-color:#4a8a4a;color:#aef0ae}
+  .score-meta{font-size:10px;letter-spacing:2px;opacity:.45;text-transform:uppercase}
+  .util-btn{
+    background:#15151c;color:#aaa;border:1px solid #2a2a36;
+    padding:8px 12px;font:11px 'Courier New',monospace;letter-spacing:2px;
+    cursor:pointer;border-radius:4px;text-transform:uppercase;
+  }
+  .util-btn:hover{background:#1d1d28;border-color:#444;color:#ddd}
+  #saved-flash{font-size:10px;letter-spacing:2px;color:#aef0ae;opacity:0;transition:opacity .15s;text-transform:uppercase}
+  #saved-flash.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="start-overlay" onclick="startAudio()">
+  <h1>Chord Palette</h1>
+  <p>Click to enable audio</p>
+</div>
+
+<h1>Chord Palette</h1>
+<div class="sub">Every named voicing in Chord Drive · click to play · pick two to score 1–3</div>
+<div id="progress">Scored: <strong id="progress-count">0</strong> / <span id="progress-total">0</span> pairs (<span id="progress-pct">0.0</span>%)</div>
+
+<div id="root"></div>
+
+<div id="score-panel">
+  <div class="slot-display">
+    <span class="slot-tag a">A</span>
+    <span class="slot-name" id="slot-a-name">—</span>
+    <span class="slot-notes" id="slot-a-notes"></span>
+  </div>
+  <span class="arrow">→</span>
+  <div class="slot-display">
+    <span class="slot-tag b">B</span>
+    <span class="slot-name" id="slot-b-name">—</span>
+    <span class="slot-notes" id="slot-b-notes"></span>
+  </div>
+  <div class="score-buttons">
+    <button class="score-btn" data-score="1" onclick="setScore(1)">1</button>
+    <button class="score-btn" data-score="2" onclick="setScore(2)">2</button>
+    <button class="score-btn" data-score="3" onclick="setScore(3)">3</button>
+  </div>
+  <span class="score-meta">1 worst → 3 best</span>
+  <button class="util-btn" onclick="replaySlot('A')">▶ A</button>
+  <button class="util-btn" onclick="replaySlot('B')">▶ B</button>
+  <button class="util-btn" onclick="swapSlots()">↔ swap</button>
+  <button class="util-btn" onclick="resetPair()">✕ reset</button>
+  <span id="saved-flash">saved ✓</span>
+</div>
+
+<div class="stop-row">
+  <button class="stop-btn" onclick="stopChord()">■ stop</button>
+  <button class="util-btn" onclick="downloadScores()">⬇ download json</button>
+  <button class="util-btn" onclick="document.getElementById('upload-input').click()">⬆ upload json</button>
+  <input id="upload-input" type="file" accept="application/json" style="display:none" onchange="uploadScores(event)">
+  <span style="font-size:10px;opacity:.4;letter-spacing:2px">5 voices · sine + detuned triangle · 0.4s glide · reverb</span>
+</div>
+
+<script>
+// ─── All chord data, unified shape: {name, notes} ───
+const SECTIONS = [
+  // ── Landmarks from index.html ──
+  {key:'tonic', title:'Tonic (I)', src:'index.html', color:[221,200,120], chords:[
+    {name:'C',       notes:[48,52,55,60,67]},
+    {name:'C add9',  notes:[48,55,60,64,72]},
+    {name:'C',       notes:[48,52,60,64,67]},
+    {name:'C add9',  notes:[48,55,64,67,72]},
+    {name:'C add9',  notes:[48,52,55,67,72]},
+    {name:'C',       notes:[48,60,64,67,72]},
+    {name:'C (low)', notes:[36,48,52,55,60]},
+    {name:'C add9',  notes:[48,55,60,67,76]},
+    {name:'C6',      notes:[48,52,55,60,64]},
+  ]},
+  {key:'parMinor', title:'Parallel Minor (pm)', src:'index.html', color:[143,164,200], chords:[
+    {name:'Cm',  notes:[48,51,55,60,67]},
+    {name:'Cm7', notes:[48,51,55,63,67]},
+    {name:'Fm',  notes:[53,56,60,65,72]},
+    {name:'Fm7', notes:[53,56,60,63,68]},
+    {name:'Ab',  notes:[44,48,51,56,63]},
+    {name:'Ab',  notes:[44,48,51,60,63]},
+    {name:'Eb',  notes:[51,55,58,63,67]},
+    {name:'Bb',  notes:[46,50,53,58,65]},
+  ]},
+  {key:'secDom', title:'Secondary Dominant (V/)', src:'index.html', color:[212,132,90], chords:[
+    {name:'D7', notes:[50,54,57,60,69]},
+    {name:'D9', notes:[50,54,60,66,69]},
+    {name:'A7', notes:[45,49,52,57,64]},
+    {name:'A7', notes:[45,49,55,61,64]},
+    {name:'E7', notes:[52,56,59,62,68]},
+    {name:'E7', notes:[52,56,59,64,68]},
+    {name:'G7', notes:[43,47,53,59,65]},
+    {name:'B7', notes:[47,50,54,59,66]},
+  ]},
+  {key:'neighbor', title:'Neighbor Key (N)', src:'index.html', color:[140,200,122], chords:[
+    {name:'G',     notes:[43,47,55,59,66]},
+    {name:'G7',    notes:[43,50,54,59,66]},
+    {name:'F',     notes:[53,57,60,65,69]},
+    {name:'Fmaj7', notes:[53,57,60,64,69]},
+    {name:'Am',    notes:[45,52,57,60,64]},
+    {name:'Am7',   notes:[45,48,52,57,64]},
+  ]},
+
+  // ── Biomes from index2.html ──
+  {key:'peaceful', title:'Peaceful · Diatonic', src:'index2.html', color:[120,200,170], chords:[
+    {name:'C',     notes:[48,55,60,64,67]},
+    {name:'F',     notes:[41,53,60,65,69]},
+    {name:'G',     notes:[43,55,62,67,71]},
+    {name:'D',     notes:[50,57,62,66,69]},
+    {name:'A',     notes:[45,52,57,61,64]},
+    {name:'Bb',    notes:[46,53,58,65,70]},
+    {name:'Eb',    notes:[51,58,63,67,70]},
+    {name:'E',     notes:[52,59,64,68,71]},
+    {name:'C6',    notes:[48,55,60,64,69]},
+    {name:'F6',    notes:[41,53,60,62,65]},
+    {name:'G6',    notes:[43,55,62,64,67]},
+    {name:'D6',    notes:[50,57,62,66,71]},
+    {name:'Csus2', notes:[48,50,55,60,67]},
+    {name:'Csus4', notes:[48,53,55,60,67]},
+    {name:'Fsus2', notes:[41,48,53,60,67]},
+    {name:'Gsus4', notes:[43,50,55,62,67]},
+    {name:'Cadd9', notes:[48,50,55,60,64]},
+    {name:'Fadd9', notes:[41,48,53,60,67]},
+  ]},
+  {key:'melancholy', title:'Melancholy · 7ths & extensions', src:'index2.html', color:[150,110,200], chords:[
+    {name:'Cmaj7',    notes:[48,55,59,64,67]},
+    {name:'Am7',      notes:[45,52,57,60,64]},
+    {name:'Dm9',      notes:[50,57,60,65,69]},
+    {name:'Fmaj7',    notes:[41,57,60,64,65]},
+    {name:'Em7',      notes:[52,55,59,62,67]},
+    {name:'Cmaj9',    notes:[48,55,59,62,64]},
+    {name:'Bbmaj7',   notes:[46,53,58,65,69]},
+    {name:'Dm7',      notes:[50,53,57,60,65]},
+    {name:'Bm7',      notes:[47,54,59,62,66]},
+    {name:'Cmaj7#11', notes:[48,55,59,64,66]},
+    {name:'Gmaj7',    notes:[43,55,62,66,71]},
+    {name:'Am9',      notes:[45,52,55,59,64]},
+    {name:'Ebmaj7',   notes:[51,58,62,67,70]},
+    {name:'F6/9',     notes:[41,53,60,62,67]},
+    {name:'Dmaj7',    notes:[50,57,61,66,69]},
+    {name:'Fmaj9',    notes:[41,53,60,64,67]},
+    {name:'Amaj7',    notes:[45,52,56,61,64]},
+    {name:'C6/9',     notes:[48,55,60,62,64]},
+  ]},
+  {key:'dark', title:'Dark · Minor & half-dim', src:'index2.html', color:[80,100,140], chords:[
+    {name:'Cm',        notes:[48,51,55,60,63]},
+    {name:'Cm7',       notes:[48,55,58,63,67]},
+    {name:'Fm',        notes:[41,53,56,60,65]},
+    {name:'Cm9',       notes:[48,55,58,62,63]},
+    {name:'Cm(maj7)',  notes:[48,51,55,60,71]},
+    {name:'Gm',        notes:[43,55,58,62,67]},
+    {name:'Fm7',       notes:[41,53,56,60,63]},
+    {name:'Bm7b5',     notes:[47,53,57,62,65]},
+    {name:'Cm6',       notes:[48,51,55,60,69]},
+    {name:'Bbm',       notes:[46,49,53,58,65]},
+    {name:'Em7b5',     notes:[52,55,58,62,67]},
+    {name:'Am7b5',     notes:[45,51,55,60,64]},
+    {name:'Fm9',       notes:[41,53,56,60,63]},
+    {name:'Am',        notes:[45,52,57,60,64]},
+    {name:'Dm',        notes:[50,53,57,62,65]},
+    {name:'Fm(maj7)',  notes:[41,53,56,60,64]},
+    {name:'Ebm',       notes:[51,54,58,63,70]},
+    {name:'Gm7',       notes:[43,55,58,62,65]},
+  ]},
+  {key:'evil', title:'Evil · Altered & dim (dissonant)', src:'index2.html', color:[220,70,60], chords:[
+    {name:'C7b9',       notes:[48,52,58,61,64]},
+    {name:'Cdim7',      notes:[48,51,54,57,60]},
+    {name:'C7#9',       notes:[48,52,58,60,63]},
+    {name:'C7alt',      notes:[48,52,58,61,63]},
+    {name:'F#7#11',     notes:[42,52,56,60,66]},
+    {name:'Db7',        notes:[49,53,59,60,65]},
+    {name:'A7b9',       notes:[45,49,55,58,61]},
+    {name:'E7b9',       notes:[52,56,62,65,68]},
+    {name:'C7#11',      notes:[48,52,58,60,66]},
+    {name:'C7#5',       notes:[48,52,56,58,64]},
+    {name:'B7b9',       notes:[47,51,57,60,63]},
+    {name:'C+7',        notes:[48,52,56,58,60]},
+    {name:'Caug',       notes:[48,52,56,60,64]},
+    {name:'Cmaj7#5',    notes:[48,52,56,59,64]},
+    {name:'D7b9',       notes:[50,54,60,63,66]},
+    {name:'C7',         notes:[48,52,58,60,64]},
+    {name:'C#dim7',     notes:[49,52,55,58,61]},
+    {name:'F#dim7',     notes:[42,51,54,57,60]},
+    {name:'Cdim(maj7)', notes:[48,51,54,57,59]},
+  ]},
+];
+
+const NOTE_NAMES=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+const noteName=m=>NOTE_NAMES[((m%12)+12)%12];
+const notesStr=ns=>ns.map(noteName).join(' ');
+
+// ─── Audio engine (mirrors index.html) ───
+const NUM_VOICES=5, GLIDE_TIME=0.4;
+const midiToFreq=m=>440*Math.pow(2,(m-69)/12);
+let audioCtx=null,voices=[],gainNode=null,started=false,activeBtn=null;
+
+function startAudio(){
+  if(started)return;started=true;
+  document.getElementById('start-overlay').style.display='none';
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  const rev=audioCtx.createConvolver();
+  const rate=audioCtx.sampleRate,len=rate*3.5;
+  const imp=audioCtx.createBuffer(2,len,rate);
+  for(let ch=0;ch<2;ch++){
+    const d=imp.getChannelData(ch);
+    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.2);
+  }
+  rev.buffer=imp;
+  gainNode=audioCtx.createGain();gainNode.gain.value=0;
+  const dry=audioCtx.createGain();dry.gain.value=0.45;
+  const wet=audioCtx.createGain();wet.gain.value=0.55;
+  gainNode.connect(dry);dry.connect(audioCtx.destination);
+  gainNode.connect(rev);rev.connect(wet);wet.connect(audioCtx.destination);
+  const SEED=[48,52,55,60,67];
+  for(let i=0;i<NUM_VOICES;i++){
+    const o1=audioCtx.createOscillator(),o2=audioCtx.createOscillator();
+    const vg=audioCtx.createGain();
+    o1.type='sine';o2.type='triangle';o2.detune.value=7;
+    const g1=audioCtx.createGain(),g2=audioCtx.createGain();
+    g1.gain.value=0.65;g2.gain.value=0.35;
+    o1.connect(g1);o2.connect(g2);g1.connect(vg);g2.connect(vg);
+    vg.gain.value=1/NUM_VOICES;vg.connect(gainNode);
+    const f=midiToFreq(SEED[i]);o1.frequency.value=f;o2.frequency.value=f;
+    o1.start();o2.start();
+    voices.push({osc1:o1,osc2:o2});
+  }
+}
+
+function setChord(notes){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  gainNode.gain.cancelScheduledValues(t);
+  gainNode.gain.linearRampToValueAtTime(0.18,t+0.05);
+  for(let i=0;i<NUM_VOICES;i++){
+    const f=midiToFreq(notes[i]);
+    voices[i].osc1.frequency.linearRampToValueAtTime(f,t+GLIDE_TIME);
+    voices[i].osc2.frequency.linearRampToValueAtTime(f,t+GLIDE_TIME);
+  }
+}
+
+function stopChord(){
+  if(!audioCtx)return;
+  const t=audioCtx.currentTime;
+  gainNode.gain.cancelScheduledValues(t);
+  gainNode.gain.linearRampToValueAtTime(0,t+0.25);
+  if(activeBtn){activeBtn.classList.remove('playing');activeBtn=null;}
+}
+
+// ─── Pair-scoring state ───
+const STORAGE_KEY='chordPairScores.v1';
+const ALL_CHORDS=[];   // flat list of {id, section, sectionTitle, index, name, notes, btn}
+const CHORD_BY_ID=new Map();
+let slotA=null, slotB=null;
+let scores=new Map();  // pairKey -> 1|2|3
+
+const pairKey=(idA,idB)=>[idA,idB].sort().join('|');
+
+function loadScores(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return;
+    const obj=JSON.parse(raw);
+    for(const k in obj){
+      const v=obj[k];
+      if(v===1||v===2||v===3)scores.set(k,v);
+    }
+  }catch(e){console.warn('failed to load scores',e);}
+}
+function persistScores(){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(Object.fromEntries(scores)));
+}
+
+// ─── Build UI ───
+const root=document.getElementById('root');
+for(const sec of SECTIONS){
+  const wrap=document.createElement('div');
+  wrap.className='group';
+  const [r,g,b]=sec.color;
+  wrap.innerHTML=
+    `<h2>`+
+      `<span class="swatch" style="border-color:rgb(${r},${g},${b});background:rgba(${r},${g},${b},0.2)"></span>`+
+      `${sec.title} · ${sec.chords.length}`+
+      `<span class="src-tag">${sec.src}</span>`+
+    `</h2>`;
+  const grid=document.createElement('div');
+  grid.className='grid';
+  sec.chords.forEach((ch,idx)=>{
+    const id=`${sec.key}:${idx}`;
+    const btn=document.createElement('button');
+    btn.innerHTML=`<span class="label">${ch.name}</span><span class="notes">${notesStr(ch.notes)}</span>`;
+    const entry={id,section:sec.key,sectionTitle:sec.title,index:idx,name:ch.name,notes:ch.notes,btn};
+    ALL_CHORDS.push(entry);
+    CHORD_BY_ID.set(id,entry);
+    btn.onclick=()=>handleChordClick(entry);
+    grid.appendChild(btn);
+  });
+  wrap.appendChild(grid);
+  root.appendChild(wrap);
+}
+
+const TOTAL_PAIRS=ALL_CHORDS.length*(ALL_CHORDS.length-1)/2;
+document.getElementById('progress-total').textContent=TOTAL_PAIRS.toLocaleString();
+
+// ─── Pair selection / scoring ───
+function handleChordClick(entry){
+  if(!started)return;
+  if(activeBtn)activeBtn.classList.remove('playing');
+  entry.btn.classList.add('playing');
+  activeBtn=entry.btn;
+  setChord(entry.notes);
+
+  if(!slotA){
+    setSlotA(entry);
+  }else if(slotA.id===entry.id){
+    // toggle off A; if B exists promote it
+    clearSlotA();
+    if(slotB){const b=slotB;clearSlotB();setSlotA(b);}
+  }else if(!slotB){
+    setSlotB(entry);
+  }else if(slotB.id===entry.id){
+    clearSlotB();
+  }else{
+    // replace B with new pick
+    clearSlotB();
+    setSlotB(entry);
+  }
+  refreshPanel();
+}
+
+function setSlotA(e){slotA=e;e.btn.classList.add('slot-a');}
+function clearSlotA(){if(slotA){slotA.btn.classList.remove('slot-a');slotA=null;}}
+function setSlotB(e){slotB=e;e.btn.classList.add('slot-b');}
+function clearSlotB(){if(slotB){slotB.btn.classList.remove('slot-b');slotB=null;}}
+
+function resetPair(){clearSlotA();clearSlotB();refreshPanel();}
+
+function swapSlots(){
+  if(!slotA||!slotB)return;
+  const a=slotA,b=slotB;
+  clearSlotA();clearSlotB();
+  setSlotA(b);setSlotB(a);
+  refreshPanel();
+  // play in the new "A" position
+  if(activeBtn)activeBtn.classList.remove('playing');
+  slotA.btn.classList.add('playing');activeBtn=slotA.btn;
+  setChord(slotA.notes);
+}
+
+function replaySlot(which){
+  const e=which==='A'?slotA:slotB;
+  if(!e||!started)return;
+  if(activeBtn)activeBtn.classList.remove('playing');
+  e.btn.classList.add('playing');activeBtn=e.btn;
+  setChord(e.notes);
+}
+
+function setScore(n){
+  if(!slotA||!slotB)return;
+  const k=pairKey(slotA.id,slotB.id);
+  scores.set(k,n);
+  persistScores();
+  refreshPanel();
+  flashSaved();
+}
+
+function flashSaved(){
+  const el=document.getElementById('saved-flash');
+  el.classList.add('show');
+  clearTimeout(flashSaved._t);
+  flashSaved._t=setTimeout(()=>el.classList.remove('show'),900);
+}
+
+function refreshPanel(){
+  const panel=document.getElementById('score-panel');
+  const aN=document.getElementById('slot-a-name');
+  const aNotes=document.getElementById('slot-a-notes');
+  const bN=document.getElementById('slot-b-name');
+  const bNotes=document.getElementById('slot-b-notes');
+  aN.textContent=slotA?`${slotA.name}`:'—';
+  aNotes.textContent=slotA?`${slotA.section} · ${notesStr(slotA.notes)}`:'';
+  bN.textContent=slotB?`${slotB.name}`:'—';
+  bNotes.textContent=slotB?`${slotB.section} · ${notesStr(slotB.notes)}`:'';
+  if(slotA&&slotB){
+    panel.classList.add('visible');
+    const k=pairKey(slotA.id,slotB.id);
+    const cur=scores.get(k);
+    document.querySelectorAll('.score-btn').forEach(b=>{
+      b.classList.toggle('current',cur===Number(b.dataset.score));
+    });
+  }else{
+    panel.classList.remove('visible');
+  }
+  refreshProgress();
+}
+
+function refreshProgress(){
+  const c=scores.size;
+  document.getElementById('progress-count').textContent=c.toLocaleString();
+  const pct=TOTAL_PAIRS?(c/TOTAL_PAIRS*100):0;
+  document.getElementById('progress-pct').textContent=pct.toFixed(1);
+}
+
+// ─── Download / Upload ───
+function downloadScores(){
+  const out={
+    version:1,
+    savedAt:new Date().toISOString(),
+    totalPairs:TOTAL_PAIRS,
+    scoredCount:scores.size,
+    scores:[...scores].map(([k,score])=>{
+      const [idA,idB]=k.split('|');
+      const a=CHORD_BY_ID.get(idA),b=CHORD_BY_ID.get(idB);
+      return{
+        a:a?{section:a.section,index:a.index,name:a.name,notes:a.notes}:{id:idA},
+        b:b?{section:b.section,index:b.index,name:b.name,notes:b.notes}:{id:idB},
+        score
+      };
+    })
+  };
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const date=new Date().toISOString().slice(0,10);
+  a.href=url;a.download=`chord-pair-scores-${date}.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),0);
+}
+
+function uploadScores(ev){
+  const file=ev.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      let merged=0;
+      if(Array.isArray(data.scores)){
+        for(const row of data.scores){
+          if(!row||!row.a||!row.b||!(row.score===1||row.score===2||row.score===3))continue;
+          const idA=`${row.a.section}:${row.a.index}`;
+          const idB=`${row.b.section}:${row.b.index}`;
+          scores.set(pairKey(idA,idB),row.score);
+          merged++;
+        }
+      }else if(data.scores&&typeof data.scores==='object'){
+        for(const k in data.scores){
+          const v=data.scores[k];
+          if(v===1||v===2||v===3){scores.set(k,v);merged++;}
+        }
+      }
+      persistScores();
+      refreshPanel();
+      alert(`Imported ${merged} scores.`);
+    }catch(e){alert('Failed to parse file: '+e.message);}
+    ev.target.value='';
+  };
+  reader.readAsText(file);
+}
+
+// ─── Keyboard shortcuts ───
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  if(e.key==='1'||e.key==='2'||e.key==='3'){
+    if(slotA&&slotB){setScore(Number(e.key));e.preventDefault();}
+  }else if(e.key==='Escape'){
+    resetPair();
+  }else if(e.key==='s'||e.key==='S'){
+    swapSlots();
+  }else if(e.key==='a'||e.key==='A'){
+    replaySlot('A');
+  }else if(e.key==='b'||e.key==='B'){
+    replaySlot('B');
+  }
+});
+
+// ─── Init ───
+loadScores();
+refreshProgress();
+</script>
+</body>
+</html>

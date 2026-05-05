@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chord Galaxy</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;overflow:hidden;font-family:'Courier New',monospace;color:#fff}
+  canvas{display:block;width:100vw;height:100vh;cursor:pointer}
+  #ui{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:10}
+  #chord-name{font-size:18px;letter-spacing:4px;text-transform:uppercase;opacity:.85;margin-bottom:4px;text-shadow:0 0 20px currentColor}
+  #note-label{font-size:11px;letter-spacing:3px;opacity:.4}
+  #section-label{font-size:9px;letter-spacing:3px;opacity:.5;margin-top:2px;text-transform:uppercase}
+  #start-overlay{position:fixed;inset:0;background:#08080c;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;cursor:pointer}
+  #start-overlay h1{font-size:36px;letter-spacing:12px;text-transform:uppercase;margin-bottom:12px;font-weight:300}
+  #start-overlay p{font-size:12px;letter-spacing:4px;opacity:.35;text-transform:uppercase;margin-bottom:6px}
+  #legend{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);display:flex;gap:16px;pointer-events:none;z-index:10;flex-wrap:wrap;justify-content:center;max-width:600px}
+  #legend .item{font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.3;display:flex;align-items:center;gap:4px}
+  #legend .dot{width:8px;height:8px;border-radius:50%}
+  #legend .ring{width:8px;height:8px;border-radius:50%;border:1.5px solid}
+  #sound-controls{position:fixed;top:10px;right:10px;z-index:20;font:11px 'Courier New',monospace;color:#aaa;background:rgba(17,17,17,.85);border:1px solid #444;padding:10px 12px;display:flex;flex-direction:column;gap:10px;min-width:180px}
+  #sound-controls .panel-header{font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.5;text-align:center;border-bottom:1px solid #2a2a2a;padding-bottom:6px}
+  #sound-controls .toggle-row{display:flex;gap:6px;justify-content:space-between}
+  #sound-controls .knob-row{display:flex;gap:8px;justify-content:space-around;padding-top:4px}
+  .sound-toggle{flex:1;font:10px 'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;color:#666;background:transparent;border:1px solid #333;padding:5px 6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;transition:background .12s,color .12s,border-color .12s}
+  .sound-toggle:hover{border-color:#555;color:#999}
+  .sound-toggle.on{background:#2a2a2a;color:#eee;border-color:#555}
+  .sound-toggle .indicator{font-size:10px;opacity:.85}
+  .knob-cell{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .knob{width:42px;height:42px;cursor:ns-resize;user-select:none;touch-action:none}
+  .knob svg{display:block;width:100%;height:100%}
+  .knob .track{fill:none;stroke:#2a2a2a;stroke-width:3}
+  .knob .arc{fill:none;stroke:#aaa;stroke-width:3;stroke-linecap:round}
+  .knob .tick{stroke:#eee;stroke-width:2;stroke-linecap:round}
+  .knob-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;text-align:center;line-height:1.3}
+</style>
+</head>
+<body>
+<div id="start-overlay" onclick="startAudio()">
+  <h1>Chord Galaxy</h1>
+  <p>WASD to fly</p>
+</div>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="chord-name">—</div>
+  <div id="note-label">—</div>
+  <div id="section-label">—</div>
+</div>
+<div id="midi-row" style="position:fixed;top:10px;left:10px;z-index:20;font:11px 'Courier New',monospace;color:#aaa;display:flex;align-items:center;gap:6px">
+  <span>MIDI</span>
+  <select id="midi-picker" style="background:#111;color:#ccc;border:1px solid #444;font:11px 'Courier New',monospace;padding:2px 4px"></select>
+  <span>ch</span>
+  <input id="midi-ch" type="number" min="1" max="16" value="1" style="width:34px;background:#111;color:#ccc;border:1px solid #444;font:11px 'Courier New',monospace;padding:2px 4px">
+</div>
+<div id="sound-controls">
+  <div class="panel-header">Sound</div>
+  <div class="toggle-row">
+    <button id="toggle-chords" class="sound-toggle on" type="button" aria-pressed="true">
+      <span>Chords</span><span class="indicator">&#9679;</span>
+    </button>
+    <button id="toggle-arp" class="sound-toggle" type="button" aria-pressed="false">
+      <span>Arp</span><span class="indicator">&#9675;</span>
+    </button>
+  </div>
+  <div class="knob-row">
+    <div class="knob-cell">
+      <div id="knob-chord-lpf" class="knob" data-value="1" role="slider" aria-label="Chord low-pass filter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="15"></circle>
+          <path class="arc" d=""></path>
+          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
+        </svg>
+      </div>
+      <div class="knob-label">LPF<br>Chords</div>
+    </div>
+    <div class="knob-cell">
+      <div id="knob-arp-lpf" class="knob" data-value="1" role="slider" aria-label="Arpeggiator low-pass filter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="15"></circle>
+          <path class="arc" d=""></path>
+          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
+        </svg>
+      </div>
+      <div class="knob-label">LPF<br>Arp</div>
+    </div>
+  </div>
+</div>
+<script>
+// ═══════════════════════════════════════
+// SOUND CONTROLS UI (visual only — not wired to audio yet)
+// ═══════════════════════════════════════
+(function(){
+  document.querySelectorAll('.sound-toggle').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const on=btn.classList.toggle('on');
+      btn.setAttribute('aria-pressed',on?'true':'false');
+      const ind=btn.querySelector('.indicator');
+      if(ind)ind.innerHTML=on?'&#9679;':'&#9675;';
+      btn.dispatchEvent(new CustomEvent('change',{bubbles:true,detail:{on}}));
+    });
+  });
+  const SWEEP=270,START=-225;
+  function polar(cx,cy,r,deg){const a=deg*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)]}
+  function renderKnob(el){
+    const v=Math.max(0,Math.min(1,parseFloat(el.dataset.value)||0));
+    const arc=el.querySelector('.arc'),tick=el.querySelector('.tick');
+    const end=START+SWEEP*v;
+    const[sx,sy]=polar(20,20,15,START),[ex,ey]=polar(20,20,15,end);
+    const large=SWEEP*v>180?1:0;
+    arc.setAttribute('d',v<=0.001?'':`M ${sx} ${sy} A 15 15 0 ${large} 1 ${ex} ${ey}`);
+    const tipDeg=START+SWEEP*v+90,[tx,ty]=polar(20,20,11,tipDeg-90);
+    tick.setAttribute('x2',tx);tick.setAttribute('y2',ty);
+    el.setAttribute('aria-valuenow',v.toFixed(2));
+  }
+  document.querySelectorAll('.knob').forEach(el=>{
+    renderKnob(el);
+    let dragY=0,dragV=0;
+    el.addEventListener('pointerdown',e=>{
+      el.setPointerCapture(e.pointerId);
+      dragY=e.clientY;dragV=parseFloat(el.dataset.value)||0;
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove',e=>{
+      if(!el.hasPointerCapture(e.pointerId))return;
+      const dy=dragY-e.clientY;
+      const v=Math.max(0,Math.min(1,dragV+dy/120));
+      el.dataset.value=v;
+      renderKnob(el);
+      el.dispatchEvent(new CustomEvent('change',{bubbles:true,detail:{value:v}}));
+    });
+    const release=e=>{if(el.hasPointerCapture(e.pointerId))el.releasePointerCapture(e.pointerId)};
+    el.addEventListener('pointerup',release);
+    el.addEventListener('pointercancel',release);
+  });
+})();
+
+// ═══════════════════════════════════════
+// HEX GRID
+// ═══════════════════════════════════════
+const HEX_SIZE=200;
+const HEX_W=Math.sqrt(3)*HEX_SIZE;
+const HEX_H=2*HEX_SIZE;
+const HEX_DIRS=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+
+function hexToPixel(q,r){return{x:HEX_W*(q+r*0.5),y:HEX_H*0.75*r}}
+function pixelToHex(x,y){const r=y/(HEX_H*0.75),q=x/HEX_W-r*0.5;return hexRound(q,r)}
+function hexRound(q,r){
+  const s=-q-r;let rq=Math.round(q),rr=Math.round(r),rs=Math.round(s);
+  const dq=Math.abs(rq-q),dr=Math.abs(rr-r),ds=Math.abs(rs-s);
+  if(dq>dr&&dq>ds)rq=-rr-rs;else if(dr>ds)rr=-rq-rs;
+  return{q:rq,r:rr};
+}
+function hexCorners(cx,cy,size){
+  const c=[];for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30);c.push({x:cx+size*Math.cos(a),y:cy+size*Math.sin(a)})}return c;
+}
+function edgeMidpoint(cx,cy,size,i){
+  const a1=Math.PI/180*(60*i-30),a2=Math.PI/180*(60*((i+1)%6)-30);
+  return{x:cx+size*0.5*(Math.cos(a1)+Math.cos(a2)),y:cy+size*0.5*(Math.sin(a1)+Math.sin(a2))};
+}
+function hexDist(q1,r1,q2,r2){return(Math.abs(q1-q2)+Math.abs(r1-r2)+Math.abs((-q1-r1)-(-q2-r2)))/2}
+
+// ═══════════════════════════════════════
+// DETERMINISTIC HASH
+// ═══════════════════════════════════════
+function coordHash(q,r){
+  let h=q*374761393+r*668265263;
+  h=(h^(h>>13))*1274126177;
+  h=h^(h>>16);
+  return((h&0x7fffffff)/0x7fffffff);
+}
+function coordRand(q,r,idx){
+  return coordHash(q*31+idx*7,r*17+idx*13);
+}
+function nameHash(s){
+  let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;
+  return((h&0x7fffffff)/0x7fffffff);
+}
+
+// ═══════════════════════════════════════
+// NOTE HELPERS
+// ═══════════════════════════════════════
+const NOTE_NAMES=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+function noteName(m){return NOTE_NAMES[m%12]}
+
+// ═══════════════════════════════════════
+// HARMONIC ANALYSIS (kept for neighbor edge labels)
+// ═══════════════════════════════════════
+const INTERVAL_CONSONANCE={0:10,1:1,2:3,3:6,4:7,5:8,6:1.5,7:9,8:6,9:7,10:3,11:2};
+
+function consonanceScore(notes){
+  let t=0,c=0;
+  for(let i=0;i<notes.length;i++)for(let j=i+1;j<notes.length;j++){
+    t+=INTERVAL_CONSONANCE[Math.abs(notes[i]-notes[j])%12]||0;c++;
+  }
+  return c>0?t/c:0;
+}
+const DISSONANCE_WEIGHT={1:1.0,2:0.3,6:0.6};
+function tenseScore(notes){
+  const pcs=[...new Set(notes.map(n=>((n%12)+12)%12))];
+  let max=0;
+  for(let i=0;i<pcs.length;i++)for(let j=i+1;j<pcs.length;j++){
+    const d=Math.abs(pcs[i]-pcs[j])%12;
+    const ic=Math.min(d,12-d);
+    const w=DISSONANCE_WEIGHT[ic]||0;
+    if(w>max)max=w;
+  }
+  return max;
+}
+
+function detectPattern(cur,nb){
+  let vi=-1,delta=0;
+  for(let i=0;i<cur.length;i++)if(cur[i]!==nb[i]){vi=i;delta=nb[i]-cur[i];break}
+  if(vi===-1)return{type:'same',voiceIdx:0,delta:0,strength:0,label:'same'};
+  const held=cur.filter((_,i)=>i!==vi);
+  const oldN=cur[vi],newN=nb[vi];
+  for(const h of held){
+    const oi=((oldN-h)%12+12)%12,ni=((newN-h)%12+12)%12;
+    if(oi===5&&ni===4)return{type:'resolve',voiceIdx:vi,delta,strength:3,label:'sus resolve'};
+    if(oi===5&&ni===3)return{type:'resolve',voiceIdx:vi,delta,strength:2.5,label:'sus resolve'};
+    if(oi===2&&ni===3)return{type:'resolve',voiceIdx:vi,delta,strength:2.5,label:'sus resolve'};
+    if(oi===2&&ni===4)return{type:'resolve',voiceIdx:vi,delta,strength:2,label:'sus resolve'};
+    if(oi===6&&(ni===5||ni===7))return{type:'resolve',voiceIdx:vi,delta,strength:3.5,label:'tritone resolve'};
+    if(oi===6&&(ni===4||ni===8))return{type:'resolve',voiceIdx:vi,delta,strength:3,label:'tritone resolve'};
+    if(oi===6&&ni===3)return{type:'resolve',voiceIdx:vi,delta,strength:2.5,label:'tritone resolve'};
+    if(oi!==6&&ni===6)return{type:'tension',voiceIdx:vi,delta,strength:3,label:'creates tritone'};
+    if((oi===1||oi===11)&&(ni===0||ni===2||ni===3||ni===9||ni===10))return{type:'resolve',voiceIdx:vi,delta,strength:2,label:'resolve'};
+    if(oi!==1&&oi!==11&&(ni===1||ni===11))return{type:'tension',voiceIdx:vi,delta,strength:2.5,label:'adds dissonance'};
+  }
+  const cd=consonanceScore(nb)-consonanceScore(cur);
+  if(cd>0.8)return{type:'resolve',voiceIdx:vi,delta,strength:Math.min(3,cd),label:'resolve'};
+  if(cd<-0.8)return{type:'tension',voiceIdx:vi,delta,strength:Math.min(3,Math.abs(cd)),label:'tension'};
+  if(delta>0)return{type:'brighten',voiceIdx:vi,delta,strength:1+Math.abs(cd)*0.5,label:'brighten'};
+  return{type:'darken',voiceIdx:vi,delta,strength:1+Math.abs(cd)*0.5,label:'darken'};
+}
+function analyzeNeighbor(c,n){return detectPattern(c,n)}
+
+// ═══════════════════════════════════════
+// VOICE LEADING METRICS
+// ═══════════════════════════════════════
+const NUM_VOICES=5;
+const VOICE_MIN=36,VOICE_MAX=84;
+
+function vlPos(a,b){
+  let s=0;for(let i=0;i<NUM_VOICES;i++)s+=Math.abs(a[i]-b[i]);return s;
+}
+function maxVoiceJump(a,b){
+  let m=0;for(let i=0;i<NUM_VOICES;i++){const d=Math.abs(a[i]-b[i]);if(d>m)m=d}return m;
+}
+
+// ═══════════════════════════════════════
+// LANDMARK CHORDS (from index.html)
+// ═══════════════════════════════════════
+const SEED_TYPES={
+  tonic:{color:[221,200,120],label:'I',sectionName:'Tonic'},
+  parMinor:{color:[143,164,200],label:'pm',sectionName:'ParMinor'},
+  secDom:{color:[212,132,90],label:'V/',sectionName:'SecDom'},
+  neighbor:{color:[140,200,122],label:'N',sectionName:'Neighbor'},
+  evil:{color:[220,70,60],label:'E',sectionName:'Evil'},
+};
+
+const TONIC_VOICINGS=[
+  [48,52,55,60,67],[48,55,60,64,72],[48,52,60,64,67],
+  [48,55,64,67,72],[48,52,55,67,72],[48,60,64,67,72],
+  [36,48,52,55,60],[48,55,60,67,76],[48,52,55,60,64],
+];
+const TONIC_NAMES=['C','C add9','C','C add9','C add9','C','C (low)','C add9','C6'];
+
+const PAR_MINOR_CHORDS=[
+  [48,51,55,60,67],[48,51,55,63,67],
+  [53,56,60,65,72],[53,56,60,63,68],
+  [44,48,51,56,63],[44,48,51,60,63],
+  [51,55,58,63,67],
+  [46,50,53,58,65],
+];
+const PAR_MINOR_NAMES=['Cm','Cm7','Fm','Fm7','Ab','Ab','Eb','Bb'];
+
+const SEC_DOM_CHORDS=[
+  [50,54,57,60,69],[50,54,60,66,69],
+  [45,49,52,57,64],[45,49,55,61,64],
+  [52,56,59,62,68],[52,56,59,64,68],
+  [43,47,53,59,65],
+  [47,50,54,59,66],
+];
+const SEC_DOM_NAMES=['D7','D9','A7','A7','E7','E7','G7','B7'];
+
+const NEIGHBOR_CHORDS=[
+  [43,47,55,59,66],[43,50,54,59,66],
+  [53,57,60,65,69],[53,57,60,64,69],
+  [45,52,57,60,64],[45,48,52,57,64],
+];
+const NEIGHBOR_NAMES=['G','G7','F','Fmaj7','Am','Am7'];
+
+// Evil chord landmarks — drawn from the Evil pool section so dissonant chords
+// have territory anchors. Without these, walks always start from consonant
+// landmarks and the picker never reaches Evil voicings.
+const EVIL_LANDMARK_VOICINGS=[
+  [48,52,58,61,64], [48,51,54,57,60], [48,52,58,60,63], [48,52,58,61,63],
+  [42,52,56,60,66], [49,53,59,60,65], [45,49,55,58,61], [52,56,62,65,68],
+  [48,52,58,60,66], [48,52,56,58,64], [47,51,57,60,63], [48,52,56,58,60],
+  [48,52,56,60,64], [48,52,56,59,64], [50,54,60,63,66], [48,52,58,60,64],
+  [49,52,55,58,61], [42,51,54,57,60], [48,51,54,57,59],
+];
+const EVIL_LANDMARK_NAMES=[
+  'C7b9','Cdim7','C7#9','C7alt','F#7#11','Db7','A7b9','E7b9',
+  'C7#11','C7#5','B7b9','C+7','Caug','Cmaj7#5','D7b9','C7',
+  'C#dim7','F#dim7','Cdim(maj7)',
+];
+
+// ═══════════════════════════════════════
+// POOL CHORDS (from index2.html biomes — 73 total)
+// Used for non-landmark tiles
+// ═══════════════════════════════════════
+const POOL_CHORDS=[
+  // Peaceful — diatonic (18)
+  {name:'Peaceful:C',     section:'Peaceful', notes:[48,55,60,64,67]},
+  {name:'Peaceful:F',     section:'Peaceful', notes:[41,53,60,65,69]},
+  {name:'Peaceful:G',     section:'Peaceful', notes:[43,55,62,67,71]},
+  {name:'Peaceful:D',     section:'Peaceful', notes:[50,57,62,66,69]},
+  {name:'Peaceful:A',     section:'Peaceful', notes:[45,52,57,61,64]},
+  {name:'Peaceful:Bb',    section:'Peaceful', notes:[46,53,58,65,70]},
+  {name:'Peaceful:Eb',    section:'Peaceful', notes:[51,58,63,67,70]},
+  {name:'Peaceful:E',     section:'Peaceful', notes:[52,59,64,68,71]},
+  {name:'Peaceful:C6',    section:'Peaceful', notes:[48,55,60,64,69]},
+  {name:'Peaceful:F6',    section:'Peaceful', notes:[41,53,60,62,65]},
+  {name:'Peaceful:G6',    section:'Peaceful', notes:[43,55,62,64,67]},
+  {name:'Peaceful:D6',    section:'Peaceful', notes:[50,57,62,66,71]},
+  {name:'Peaceful:Csus2', section:'Peaceful', notes:[48,50,55,60,67]},
+  {name:'Peaceful:Csus4', section:'Peaceful', notes:[48,53,55,60,67]},
+  {name:'Peaceful:Fsus2', section:'Peaceful', notes:[41,48,53,60,67]},
+  {name:'Peaceful:Gsus4', section:'Peaceful', notes:[43,50,55,62,67]},
+  {name:'Peaceful:Cadd9', section:'Peaceful', notes:[48,50,55,60,64]},
+  {name:'Peaceful:Fadd9', section:'Peaceful', notes:[41,48,53,60,67]},
+  // Melancholy — 7ths & extensions (18)
+  {name:'Melancholy:Cmaj7',    section:'Melancholy', notes:[48,55,59,64,67]},
+  {name:'Melancholy:Am7',      section:'Melancholy', notes:[45,52,57,60,64]},
+  {name:'Melancholy:Dm9',      section:'Melancholy', notes:[50,57,60,65,69]},
+  {name:'Melancholy:Fmaj7',    section:'Melancholy', notes:[41,57,60,64,65]},
+  {name:'Melancholy:Em7',      section:'Melancholy', notes:[52,55,59,62,67]},
+  {name:'Melancholy:Cmaj9',    section:'Melancholy', notes:[48,55,59,62,64]},
+  {name:'Melancholy:Bbmaj7',   section:'Melancholy', notes:[46,53,58,65,69]},
+  {name:'Melancholy:Dm7',      section:'Melancholy', notes:[50,53,57,60,65]},
+  {name:'Melancholy:Bm7',      section:'Melancholy', notes:[47,54,59,62,66]},
+  {name:'Melancholy:Cmaj7#11', section:'Melancholy', notes:[48,55,59,64,66]},
+  {name:'Melancholy:Gmaj7',    section:'Melancholy', notes:[43,55,62,66,71]},
+  {name:'Melancholy:Am9',      section:'Melancholy', notes:[45,52,55,59,64]},
+  {name:'Melancholy:Ebmaj7',   section:'Melancholy', notes:[51,58,62,67,70]},
+  {name:'Melancholy:F6/9',     section:'Melancholy', notes:[41,53,60,62,67]},
+  {name:'Melancholy:Dmaj7',    section:'Melancholy', notes:[50,57,61,66,69]},
+  {name:'Melancholy:Fmaj9',    section:'Melancholy', notes:[41,53,60,64,67]},
+  {name:'Melancholy:Amaj7',    section:'Melancholy', notes:[45,52,56,61,64]},
+  {name:'Melancholy:C6/9',     section:'Melancholy', notes:[48,55,60,62,64]},
+  // Dark — minor & half-dim (18)
+  {name:'Dark:Cm',        section:'Dark', notes:[48,51,55,60,63]},
+  {name:'Dark:Cm7',       section:'Dark', notes:[48,55,58,63,67]},
+  {name:'Dark:Fm',        section:'Dark', notes:[41,53,56,60,65]},
+  {name:'Dark:Cm9',       section:'Dark', notes:[48,55,58,62,63]},
+  {name:'Dark:Cm(maj7)',  section:'Dark', notes:[48,51,55,60,71]},
+  {name:'Dark:Gm',        section:'Dark', notes:[43,55,58,62,67]},
+  {name:'Dark:Fm7',       section:'Dark', notes:[41,53,56,60,63]},
+  {name:'Dark:Bm7b5',     section:'Dark', notes:[47,53,57,62,65]},
+  {name:'Dark:Cm6',       section:'Dark', notes:[48,51,55,60,69]},
+  {name:'Dark:Bbm',       section:'Dark', notes:[46,49,53,58,65]},
+  {name:'Dark:Em7b5',     section:'Dark', notes:[52,55,58,62,67]},
+  {name:'Dark:Am7b5',     section:'Dark', notes:[45,51,55,60,64]},
+  {name:'Dark:Fm9',       section:'Dark', notes:[41,53,56,60,63]},
+  {name:'Dark:Am',        section:'Dark', notes:[45,52,57,60,64]},
+  {name:'Dark:Dm',        section:'Dark', notes:[50,53,57,62,65]},
+  {name:'Dark:Fm(maj7)',  section:'Dark', notes:[41,53,56,60,64]},
+  {name:'Dark:Ebm',       section:'Dark', notes:[51,54,58,63,70]},
+  {name:'Dark:Gm7',       section:'Dark', notes:[43,55,58,62,65]},
+  // Evil — altered & dim (19)
+  {name:'Evil:C7b9',       section:'Evil', notes:[48,52,58,61,64]},
+  {name:'Evil:Cdim7',      section:'Evil', notes:[48,51,54,57,60]},
+  {name:'Evil:C7#9',       section:'Evil', notes:[48,52,58,60,63]},
+  {name:'Evil:C7alt',      section:'Evil', notes:[48,52,58,61,63]},
+  {name:'Evil:F#7#11',     section:'Evil', notes:[42,52,56,60,66]},
+  {name:'Evil:Db7',        section:'Evil', notes:[49,53,59,60,65]},
+  {name:'Evil:A7b9',       section:'Evil', notes:[45,49,55,58,61]},
+  {name:'Evil:E7b9',       section:'Evil', notes:[52,56,62,65,68]},
+  {name:'Evil:C7#11',      section:'Evil', notes:[48,52,58,60,66]},
+  {name:'Evil:C7#5',       section:'Evil', notes:[48,52,56,58,64]},
+  {name:'Evil:B7b9',       section:'Evil', notes:[47,51,57,60,63]},
+  {name:'Evil:C+7',        section:'Evil', notes:[48,52,56,58,60]},
+  {name:'Evil:Caug',       section:'Evil', notes:[48,52,56,60,64]},
+  {name:'Evil:Cmaj7#5',    section:'Evil', notes:[48,52,56,59,64]},
+  {name:'Evil:D7b9',       section:'Evil', notes:[50,54,60,63,66]},
+  {name:'Evil:C7',         section:'Evil', notes:[48,52,58,60,64]},
+  {name:'Evil:C#dim7',     section:'Evil', notes:[49,52,55,58,61]},
+  {name:'Evil:F#dim7',     section:'Evil', notes:[42,51,54,57,60]},
+  {name:'Evil:Cdim(maj7)', section:'Evil', notes:[48,51,54,57,59]},
+];
+
+// Section colors (for visuals)
+const SECTION_COLORS={
+  Tonic:[221,200,120],
+  ParMinor:[143,164,200],
+  SecDom:[212,132,90],
+  Neighbor:[140,200,122],
+  Peaceful:[120,200,170],
+  Melancholy:[150,110,200],
+  Dark:[80,100,140],
+  Evil:[220,70,60],
+};
+
+// ═══════════════════════════════════════
+// FUNCTIONAL BONUS
+// Sparse hand-authored map: pairs the picker should prefer beyond what
+// raw voice-leading cost suggests. Sourced from chord-pair-scores.json
+// (high vl_pos pairs the user scored as 3 = especially good).
+// ═══════════════════════════════════════
+const FUNCTIONAL_BONUS={
+  'Melancholy:Fmaj9':    {'Melancholy:Cmaj9':8},
+  'Melancholy:Cmaj7':    {'Melancholy:Fmaj7':6,'Melancholy:Em7':4,'Melancholy:Bm7':4},
+  'Dark:Fm9':            {'Dark:Cm9':6,'Dark:Am':4},
+  'Melancholy:Cmaj9':    {'Melancholy:Bbmaj7':6},
+  'Melancholy:Amaj7':    {'Melancholy:C6/9':4},
+  'Melancholy:Bm7':      {'Melancholy:Cmaj7#11':4},
+  'Evil:B7b9':           {'Evil:Cmaj7#5':5},
+  'Dark:Am7b5':          {'Dark:Am':4},
+};
+
+// Biome territory — low-frequency hash partitions the map into ~4-hex-wide
+// regions, each with a preferred section. Gives Evil/Dark/Melancholy/Peaceful
+// each their own organic territory zones independent of landmarks. Without
+// this, the picker drifts toward consonance even inside Evil landmark territory.
+function getPreferredSection(q,r){
+  const h=coordHash(Math.floor(q/4)+777,Math.floor(r/4)+777);
+  if(h<0.25)return'Peaceful';
+  if(h<0.50)return'Melancholy';
+  if(h<0.72)return'Dark';
+  return'Evil';   // ~28% Evil territory — generous since Evil chords are sparse otherwise
+}
+
+const SECTION_BIAS_BONUS=3;   // how strongly a tile's biome favors its section
+
+function pickFromPool(prevChord,q,r){
+  const prev=prevChord.notes;
+  const bonusRow=FUNCTIONAL_BONUS[prevChord.name]||{};
+  const prefSection=getPreferredSection(q,r);
+  const scored=POOL_CHORDS.map(c=>{
+    const vl=vlPos(prev,c.notes);
+    const jp=Math.max(0,maxVoiceJump(prev,c.notes)-5)*3;
+    const bonus=bonusRow[c.name]||0;
+    const sectBonus=(c.section===prefSection)?SECTION_BIAS_BONUS:0;
+    return{chord:c,cost:vl+jp-bonus-sectBonus};
+  });
+  scored.sort((a,b)=>a.cost-b.cost);
+  const idx=Math.floor(coordRand(q,r,99)*Math.min(3,scored.length));
+  const picked=scored[idx].chord;
+  return{name:picked.name,section:picked.section,notes:[...picked.notes]};
+}
+
+// ═══════════════════════════════════════
+// LANDMARK DETECTION (unchanged)
+// ═══════════════════════════════════════
+function getLandmarkType(q,r){
+  const h1=coordHash(q,r);
+  const h2=coordHash(q+1000,r+1000);
+  if(q===0&&r===0)return'tonic';
+  const clusterNoise=coordHash(Math.floor(q/5),Math.floor(r/5));
+  if(h1<0.04&&clusterNoise>0.3)return'tonic';
+  if(h1>0.20&&h1<0.23&&h2>0.4)return'parMinor';
+  if(h1>0.50&&h1<0.525&&h2>0.3)return'secDom';
+  if(h1>0.75&&h1<0.77)return'neighbor';
+  // Evil — ~2.5%, scattered (no cluster check) so Evil chords have territory anchors
+  if(h1>0.85&&h1<0.875)return'evil';
+  return null;
+}
+
+// Returns {name, section, notes} for a landmark at (q,r) of given type
+function getLandmarkChord(type,q,r){
+  const h=coordHash(q*19+3,r*23+5);
+  let arr,names,sect;
+  if(type==='tonic'){arr=TONIC_VOICINGS;names=TONIC_NAMES;sect='Tonic'}
+  else if(type==='parMinor'){arr=PAR_MINOR_CHORDS;names=PAR_MINOR_NAMES;sect='ParMinor'}
+  else if(type==='secDom'){arr=SEC_DOM_CHORDS;names=SEC_DOM_NAMES;sect='SecDom'}
+  else if(type==='neighbor'){arr=NEIGHBOR_CHORDS;names=NEIGHBOR_NAMES;sect='Neighbor'}
+  else if(type==='evil'){arr=EVIL_LANDMARK_VOICINGS;names=EVIL_LANDMARK_NAMES;sect='Evil'}
+  else{arr=TONIC_VOICINGS;names=TONIC_NAMES;sect='Tonic'}
+  const idx=Math.floor(h*arr.length);
+  return{name:`${sect}:${names[idx]}`,section:sect,notes:[...arr[idx]]};
+}
+
+// ═══════════════════════════════════════
+// FIND NEAREST LANDMARK
+// ═══════════════════════════════════════
+const landmarkCache=new Map();
+
+function findNearestLandmark(q,r){
+  const key=`${q},${r}`;
+  if(landmarkCache.has(key))return landmarkCache.get(key);
+  const selfType=getLandmarkType(q,r);
+  if(selfType){
+    const result={q,r,type:selfType,dist:0};
+    landmarkCache.set(key,result);
+    return result;
+  }
+  const visited=new Set([key]);
+  let ring=[{q,r}];
+  for(let dist=1;dist<=20;dist++){
+    const nextRing=[];
+    for(const cell of ring){
+      for(const[dq,dr]of HEX_DIRS){
+        const nq=cell.q+dq,nr=cell.r+dr;
+        const nk=`${nq},${nr}`;
+        if(visited.has(nk))continue;
+        visited.add(nk);
+        const type=getLandmarkType(nq,nr);
+        if(type){
+          const result={q:nq,r:nr,type,dist};
+          landmarkCache.set(key,result);
+          return result;
+        }
+        nextRing.push({q:nq,r:nr});
+      }
+    }
+    ring=nextRing;
+  }
+  const result={q:0,r:0,type:'tonic',dist:hexDist(q,r,0,0)};
+  landmarkCache.set(key,result);
+  return result;
+}
+
+function findNearestUnexploredTonic(q,r){
+  const startKey=`${q},${r}`;
+  if(getLandmarkType(q,r)==='tonic'&&!visitedTonicKeys.has(startKey))return{q,r,dist:0};
+  const visited=new Set([startKey]);
+  let ring=[{q,r}];
+  for(let dist=1;dist<=40;dist++){
+    const next=[];
+    for(const cell of ring){
+      for(const[dq,dr]of HEX_DIRS){
+        const nq=cell.q+dq,nr=cell.r+dr;
+        const nk=`${nq},${nr}`;
+        if(visited.has(nk))continue;
+        visited.add(nk);
+        if(getLandmarkType(nq,nr)==='tonic'&&!visitedTonicKeys.has(nk))return{q:nq,r:nr,dist};
+        next.push({q:nq,r:nr});
+      }
+    }
+    ring=next;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════
+// TILE GENERATION
+// ═══════════════════════════════════════
+const hexMap=new Map();
+
+function tracePath(landmark,tq,tr){
+  const path=[];
+  let cq=landmark.q,cr=landmark.r;
+  while(cq!==tq||cr!==tr){
+    let bestDir=0,bestDist=Infinity;
+    for(let d=0;d<6;d++){
+      const nq=cq+HEX_DIRS[d][0],nr=cr+HEX_DIRS[d][1];
+      const dist=hexDist(nq,nr,tq,tr);
+      if(dist<bestDist){bestDist=dist;bestDir=d}
+    }
+    const nq=cq+HEX_DIRS[bestDir][0],nr=cr+HEX_DIRS[bestDir][1];
+    path.push({fromQ:cq,fromR:cr,toQ:nq,toR:nr});
+    cq=nq;cr=nr;
+  }
+  return path;
+}
+
+function tileFromChord(q,r,chord,seedType,landmarkKey){
+  const pos=hexToPixel(q,r);
+  return{
+    q,r,notes:chord.notes,
+    px:pos.x,py:pos.y,
+    noteLabel:chord.notes.map(n=>noteName(n)).join('  '),
+    chordName:chord.name,
+    chordSection:chord.section,
+    seedType,isSeed:!!seedType,
+    color:chordColor(chord),
+    landmarkKey,
+  };
+}
+
+function ensureTile(q,r){
+  const key=`${q},${r}`;
+  if(hexMap.has(key))return hexMap.get(key);
+
+  const myType=getLandmarkType(q,r);
+  if(myType){
+    const chord=getLandmarkChord(myType,q,r);
+    const tile=tileFromChord(q,r,chord,myType,key);
+    hexMap.set(key,tile);
+    return tile;
+  }
+
+  // Non-landmark: walk from nearest landmark, picking from pool at each step
+  const landmark=findNearestLandmark(q,r);
+  const landmarkKey=`${landmark.q},${landmark.r}`;
+  if(!hexMap.has(landmarkKey)){
+    const lchord=getLandmarkChord(landmark.type,landmark.q,landmark.r);
+    hexMap.set(landmarkKey,tileFromChord(landmark.q,landmark.r,lchord,landmark.type,landmarkKey));
+  }
+
+  const landmarkTile=hexMap.get(landmarkKey);
+  let currentChord={
+    name:landmarkTile.chordName,
+    section:landmarkTile.chordSection,
+    notes:[...landmarkTile.notes],
+  };
+
+  const path=tracePath(landmark,q,r);
+  for(const step of path){
+    const stepKey=`${step.toQ},${step.toR}`;
+    if(hexMap.has(stepKey)){
+      const t=hexMap.get(stepKey);
+      currentChord={name:t.chordName,section:t.chordSection,notes:[...t.notes]};
+    }else{
+      const stepType=getLandmarkType(step.toQ,step.toR);
+      if(stepType){
+        currentChord=getLandmarkChord(stepType,step.toQ,step.toR);
+        hexMap.set(stepKey,tileFromChord(step.toQ,step.toR,currentChord,stepType,stepKey));
+      }else{
+        currentChord=pickFromPool(currentChord,step.toQ,step.toR);
+        // Cache intermediate non-landmark tiles too so future paths reuse them
+        if(step.toQ!==q||step.toR!==r){
+          hexMap.set(stepKey,tileFromChord(step.toQ,step.toR,currentChord,null,landmarkKey));
+        }
+      }
+    }
+  }
+
+  const tile=tileFromChord(q,r,currentChord,null,landmarkKey);
+  hexMap.set(key,tile);
+  return tile;
+}
+
+function ensureArea(q,r){
+  ensureTile(q,r);
+  for(const[dq,dr]of HEX_DIRS)ensureTile(q+dq,r+dr);
+  for(const[dq,dr]of HEX_DIRS){
+    const nq=q+dq,nr=r+dr;
+    for(const[dq2,dr2]of HEX_DIRS)ensureTile(nq+dq2,nr+dr2);
+  }
+}
+
+// Color = section base color modulated per-chord-name
+function chordColor(chord){
+  const base=SECTION_COLORS[chord.section]||[140,140,140];
+  const dr=Math.floor((nameHash(chord.name+'r')-0.5)*40);
+  const dg=Math.floor((nameHash(chord.name+'g')-0.5)*40);
+  const db=Math.floor((nameHash(chord.name+'b')-0.5)*40);
+  return[
+    Math.max(20,Math.min(255,base[0]+dr)),
+    Math.max(20,Math.min(255,base[1]+dg)),
+    Math.max(20,Math.min(255,base[2]+db)),
+  ];
+}
+
+function noteDiff(a,b){let d=0;for(let i=0;i<a.length;i++)if(a[i]!==b[i])d++;return d}
+
+// ═══════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════
+const GLIDE_TIME=0.4;
+function midiToFreq(m){return 440*Math.pow(2,(m-69)/12)}
+let audioCtx=null,voices=[],gainNode=null,started=false;
+let midiOutput=null,prevMidiNotes=[];
+
+function startAudio(){
+  if(started)return;started=true;
+  document.getElementById('start-overlay').style.display='none';
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  const rev=audioCtx.createConvolver();
+  const rate=audioCtx.sampleRate,len=rate*3.5;
+  const imp=audioCtx.createBuffer(2,len,rate);
+  for(let ch=0;ch<2;ch++){const d=imp.getChannelData(ch);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.2)}
+  rev.buffer=imp;
+  gainNode=audioCtx.createGain();gainNode.gain.value=0.18;
+  const dry=audioCtx.createGain();dry.gain.value=0.45;
+  const wet=audioCtx.createGain();wet.gain.value=0.55;
+  gainNode.connect(dry);dry.connect(audioCtx.destination);
+  gainNode.connect(rev);rev.connect(wet);wet.connect(audioCtx.destination);
+  const SEED=[48,52,55,60,67];
+  for(let i=0;i<NUM_VOICES;i++){
+    const o1=audioCtx.createOscillator(),o2=audioCtx.createOscillator();
+    const vg=audioCtx.createGain();
+    o1.type='sine';o2.type='triangle';o2.detune.value=7;
+    const g1=audioCtx.createGain(),g2=audioCtx.createGain();
+    g1.gain.value=0.65;g2.gain.value=0.35;
+    o1.connect(g1);o2.connect(g2);g1.connect(vg);g2.connect(vg);
+    vg.gain.value=1/NUM_VOICES;vg.connect(gainNode);
+    const f=midiToFreq(SEED[i]);o1.frequency.value=f;o2.frequency.value=f;o1.start();o2.start();
+    voices.push({osc1:o1,osc2:o2,currentMidi:SEED[i]});
+  }
+  ensureArea(0,0);
+  initMIDI();
+}
+
+function setChord(notes){
+  if(!audioCtx||!voices.length)return;const t=audioCtx.currentTime;
+  for(let i=0;i<NUM_VOICES;i++){
+    const f=midiToFreq(notes[i]);
+    voices[i].osc1.frequency.linearRampToValueAtTime(f,t+GLIDE_TIME);
+    voices[i].osc2.frequency.linearRampToValueAtTime(f,t+GLIDE_TIME);
+    voices[i].currentMidi=notes[i];
+  }
+  sendMIDIChord(notes);
+}
+
+async function initMIDI(){
+  if(!navigator.requestMIDIAccess)return;
+  try{
+    const access=await navigator.requestMIDIAccess();
+    buildMIDIPicker(access);
+    access.onstatechange=()=>buildMIDIPicker(access);
+  }catch(e){console.warn('MIDI access denied',e)}
+}
+
+function buildMIDIPicker(access){
+  const sel=document.getElementById('midi-picker');
+  if(!sel)return;
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— no MIDI —</option>';
+  for(const[id,port]of access.outputs){
+    const opt=document.createElement('option');
+    opt.value=id;opt.textContent=port.name;
+    sel.appendChild(opt);
+  }
+  sel.value=prev||[...access.outputs.keys()][0]||'';
+  midiOutput=access.outputs.get(sel.value)||null;
+  sel.onchange=()=>{midiOutput=access.outputs.get(sel.value)||null};
+}
+
+function sendMIDIChord(notes){
+  if(!midiOutput)return;
+  const ch=(parseInt(document.getElementById('midi-ch')?.value)||1)-1;
+  const changes=[];
+  for(let i=0;i<notes.length;i++){
+    if(prevMidiNotes[i]!==notes[i])changes.push({n:notes[i],p:prevMidiNotes[i]});
+  }
+  changes.sort((a,b)=>b.n-a.n);
+  for(const{n,p}of changes){
+    midiOutput.send([0x90|ch,n,100]);
+    if(p!=null)midiOutput.send([0x80|ch,p,0]);
+  }
+  prevMidiNotes=[...notes];
+}
+
+function sendMIDICC(channel,cc,value){
+  if(!midiOutput)return;
+  const ch=Math.max(0,Math.min(15,channel-1));
+  midiOutput.send([0xB0|ch,cc,value]);
+}
+
+// ═══════════════════════════════════════
+// CAR & INPUT
+// ═══════════════════════════════════════
+const centerPx=hexToPixel(0,0);
+const car={x:centerPx.x,y:centerPx.y+60,angle:-Math.PI/2,vx:0,vy:0,speed:0};
+const keyState={};
+window.addEventListener('keydown',e=>{keyState[e.key.toLowerCase()]=true;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))e.preventDefault()});
+window.addEventListener('keyup',e=>keyState[e.key.toLowerCase()]=false);
+
+// ═══════════════════════════════════════
+// CANVAS & CLICK
+// ═══════════════════════════════════════
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+function resize(){canvas.width=window.innerWidth*devicePixelRatio;canvas.height=window.innerHeight*devicePixelRatio}
+resize();window.addEventListener('resize',resize);
+
+let lastHexKey='',currentTile=null,neighborAnalysis=[];
+let visitedTonicKeys=new Set(['0,0']),currentPhase=1;
+let lastTonicTile={q:0,r:0},tonicProgress=0,_nextTonic=null,_progressScale=0;
+let tenseLevel=0;
+const LIGHTNING_RATE=2;
+const STAR_DENSITY=4;
+let lightningFlash=0,lightningBolt=null;
+let melancholyLevel=0;
+const RAIN_SPAWN_RATE=180;
+const rainDrops=[];
+let tonicLevel=0;
+const FIREWORK_RATE=1.6;
+const fireworkParticles=[];
+let peacefulLevel=0;
+const WIND_SPAWN_RATE=14;
+const windStreaks=[];
+const FIREWORK_PALETTE=[[255,210,90],[255,150,80],[255,255,200],[255,120,170],[150,220,255],[180,255,160]];
+function spawnFirework(vw,vh){
+  const cx=80+Math.random()*(vw-160),cy=80+Math.random()*(vh*0.55);
+  const col=FIREWORK_PALETTE[Math.floor(Math.random()*FIREWORK_PALETTE.length)];
+  const n=24+Math.floor(Math.random()*18);
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,sp=80+Math.random()*180;
+    fireworkParticles.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,decay:0.55+Math.random()*0.45,r:col[0],g:col[1],b:col[2]});
+  }
+}
+function makeBolt(vw,vh){
+  function trace(sx,sy,maxLen){
+    const pts=[[sx,sy]];let x=sx,y=sy,n=0;
+    while(y<vh+10&&n<maxLen){x+=(Math.random()-0.5)*70;y+=18+Math.random()*30;pts.push([x,y]);n++}
+    return pts;
+  }
+  const segs=[trace(Math.random()*vw,-10,200)];
+  const main=segs[0];
+  const branches=1+Math.floor(Math.random()*2);
+  for(let i=0;i<branches;i++){
+    const bp=main[2+Math.floor(Math.random()*Math.max(1,main.length-3))];
+    if(bp)segs.push(trace(bp[0],bp[1],4+Math.floor(Math.random()*4)));
+  }
+  return segs;
+}
+
+function selectTile(tile){
+  car.x=tile.px;car.y=tile.py;car.vx=0;car.vy=0;car.speed=0;
+  lastHexKey='';
+  ensureArea(tile.q,tile.r);
+}
+
+canvas.addEventListener('click',e=>{
+  if(!started)return;
+  const wx=e.clientX+(car.x-window.innerWidth/2);
+  const wy=e.clientY+(car.y-window.innerHeight/2);
+  const hex=pixelToHex(wx,wy);
+  const tile=ensureTile(hex.q,hex.r);
+  ensureArea(hex.q,hex.r);
+  selectTile(tile);
+});
+
+const trail=[],MAX_TRAIL=800,particles=[];
+function spawnP(x,y,c){particles.push({x,y,vx:(Math.random()-0.5)*20,vy:(Math.random()-0.5)*20,life:1,decay:0.008+Math.random()*0.012,r:c[0],g:c[1],b:c[2],size:2+Math.random()*3})}
+
+const COL_RESOLVE=[92,168,200];
+const COL_TENSION=[212,85,85];
+const COL_BRIGHTEN=[232,197,90];
+const COL_DARKEN=[123,104,174];
+
+// ═══════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════
+let lastTime=performance.now();
+const ACCEL=280,FRIC=0.97,TURNSPD=3,MAXSPD=220;
+
+function update(now){
+  const dt=Math.min((now-lastTime)/1000,0.05);lastTime=now;
+  const up=keyState['w']||keyState['arrowup'],dn=keyState['s']||keyState['arrowdown'];
+  const lt=keyState['a']||keyState['arrowleft'],rt=keyState['d']||keyState['arrowright'];
+  if(lt)car.angle-=TURNSPD*dt;if(rt)car.angle+=TURNSPD*dt;
+  if(up){car.vx+=Math.cos(car.angle)*ACCEL*dt;car.vy+=Math.sin(car.angle)*ACCEL*dt}
+  if(dn){car.vx-=Math.cos(car.angle)*ACCEL*dt*0.5;car.vy-=Math.sin(car.angle)*ACCEL*dt*0.5}
+  car.vx*=FRIC;car.vy*=FRIC;
+  const PLANET_RADIUS=16,GRAVITY_RADIUS=HEX_SIZE*1.6,GRAVITY_STRENGTH=520;
+  const carHex=pixelToHex(car.x,car.y);
+  if(!up&&!dn){
+    for(let dq=-3;dq<=3;dq++){
+      for(let dr=-3;dr<=3;dr++){
+        const t=hexMap.get(`${carHex.q+dq},${carHex.r+dr}`);
+        if(!t||!t.isSeed)continue;
+        const dx=t.px-car.x,dy=t.py-car.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist>=GRAVITY_RADIUS||dist<0.001)continue;
+        const falloff=1-dist/GRAVITY_RADIUS;
+        const a=GRAVITY_STRENGTH*falloff*falloff;
+        car.vx+=(dx/dist)*a*dt;car.vy+=(dy/dist)*a*dt;
+      }
+    }
+  }
+  car.speed=Math.sqrt(car.vx*car.vx+car.vy*car.vy);
+  if(car.speed>MAXSPD){car.vx*=MAXSPD/car.speed;car.vy*=MAXSPD/car.speed;car.speed=MAXSPD}
+  car.x+=car.vx*dt;car.y+=car.vy*dt;
+  // Solid planet collision — push car out to surface, kill inward velocity
+  for(let dq=-3;dq<=3;dq++){
+    for(let dr=-3;dr<=3;dr++){
+      const t=hexMap.get(`${carHex.q+dq},${carHex.r+dr}`);
+      if(!t||!t.isSeed)continue;
+      const dx=car.x-t.px,dy=car.y-t.py;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist>=PLANET_RADIUS||dist<0.001)continue;
+      const nx=dx/dist,ny=dy/dist;
+      car.x=t.px+nx*PLANET_RADIUS;car.y=t.py+ny*PLANET_RADIUS;
+      const vn=car.vx*nx+car.vy*ny;
+      if(vn<0){car.vx-=vn*nx;car.vy-=vn*ny;}
+    }
+  }
+  car.speed=Math.sqrt(car.vx*car.vx+car.vy*car.vy);
+  if(car.speed>5){trail.push({x:car.x,y:car.y,age:0});if(trail.length>MAX_TRAIL)trail.shift()}
+  for(const t of trail)t.age+=dt;
+
+  const hex=pixelToHex(car.x,car.y);
+  const hk=`${hex.q},${hex.r}`;
+  const tile=hexMap.get(hk)||ensureTile(hex.q,hex.r);
+  if(tile&&hk!==lastHexKey){
+    ensureArea(hex.q,hex.r);
+    setChord(tile.notes);lastHexKey=hk;currentTile=tile;
+    if(tile.isSeed&&tile.seedType==='tonic'&&!visitedTonicKeys.has(hk)){visitedTonicKeys.add(hk);currentPhase++;sendMIDICC(currentPhase,20,127);lastTonicTile={q:tile.q,r:tile.r};_nextTonic=null;_progressScale=0;}
+    if(!tile.isSeed||tile.seedType!=='tonic'){_nextTonic=findNearestUnexploredTonic(tile.q,tile.r);if(_nextTonic&&_progressScale===0){const lp=hexToPixel(lastTonicTile.q,lastTonicTile.r);const np=hexToPixel(_nextTonic.q,_nextTonic.r);_progressScale=Math.sqrt((lp.x-np.x)**2+(lp.y-np.y)**2);}}
+    for(let i=0;i<5;i++)spawnP(car.x,car.y,tile.color);
+    neighborAnalysis=[];
+    for(let i=0;i<6;i++){
+      const nq=tile.q+HEX_DIRS[i][0],nr=tile.r+HEX_DIRS[i][1];
+      const nb=hexMap.get(`${nq},${nr}`);
+      if(nb)neighborAnalysis.push({tile:nb,analysis:analyzeNeighbor(tile.notes,nb.notes),edgeIdx:i});
+    }
+  }
+
+  if(currentTile){
+    const prevProgress=tonicProgress;
+    if(currentTile.isSeed&&currentTile.seedType==='tonic'){tonicProgress=0;}
+    else if(_nextTonic&&_progressScale>0){const nx=hexToPixel(_nextTonic.q,_nextTonic.r);const dNext=Math.sqrt((car.x-nx.x)**2+(car.y-nx.y)**2);tonicProgress=Math.min(0.999,Math.max(0,1-dNext/_progressScale));}
+    const ccVal=Math.round(tonicProgress*127);if(Math.round(prevProgress*127)!==ccVal)sendMIDICC(currentPhase,21,ccVal);
+  }
+
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=0.97;p.vy*=0.97;p.life-=p.decay;
+    if(p.life<=0)particles.splice(i,1);
+  }
+
+  if(currentTile){
+    const cn=document.getElementById('chord-name');
+    cn.textContent=currentTile.chordName?currentTile.chordName.split(':')[1]:currentTile.noteLabel;
+    cn.style.color=`rgb(${currentTile.color.join(',')})`;
+    document.getElementById('note-label').textContent=currentTile.noteLabel;
+    const sectLine=currentTile.chordSection||'';
+    const seedTag=currentTile.isSeed?` · ${SEED_TYPES[currentTile.seedType]?.label||''}`:'';
+    document.getElementById('section-label').textContent=sectLine+seedTag;
+  }
+
+  const tenseTarget=(currentTile&&currentTile.chordSection==='Evil')?1:0;
+  tenseLevel+=(tenseTarget-tenseLevel)*(1-Math.exp(-dt*2.5));
+
+  lightningFlash*=Math.exp(-dt*5);
+  if(tenseLevel>0.4&&Math.random()<tenseLevel*LIGHTNING_RATE*dt){
+    lightningFlash=1;
+    lightningBolt=makeBolt(window.innerWidth,window.innerHeight);
+  }
+
+  const melancholyTarget=(currentTile&&currentTile.chordSection==='Melancholy')?1:0;
+  melancholyLevel+=(melancholyTarget-melancholyLevel)*(1-Math.exp(-dt*1.8));
+  const spawnCount=RAIN_SPAWN_RATE*melancholyLevel*dt;
+  let toSpawn=Math.floor(spawnCount)+(Math.random()<spawnCount-Math.floor(spawnCount)?1:0);
+  while(toSpawn-->0){
+    rainDrops.push({x:Math.random()*window.innerWidth,y:-20-Math.random()*40,vy:520+Math.random()*280,vx:-60-Math.random()*40,len:10+Math.random()*14});
+  }
+  for(let i=rainDrops.length-1;i>=0;i--){
+    const d=rainDrops[i];d.x+=d.vx*dt;d.y+=d.vy*dt;
+    if(d.y>window.innerHeight+20||d.x<-30)rainDrops.splice(i,1);
+  }
+
+  const tonicTarget=(currentTile&&currentTile.chordSection==='Tonic')?1:0;
+  tonicLevel+=(tonicTarget-tonicLevel)*(1-Math.exp(-dt*1.8));
+  if(tonicLevel>0.2&&Math.random()<tonicLevel*FIREWORK_RATE*dt){
+    spawnFirework(window.innerWidth,window.innerHeight);
+  }
+  for(let i=fireworkParticles.length-1;i>=0;i--){
+    const p=fireworkParticles[i];
+    p.vy+=140*dt;p.vx*=Math.pow(0.55,dt);p.vy*=Math.pow(0.7,dt);
+    p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=p.decay*dt;
+    if(p.life<=0)fireworkParticles.splice(i,1);
+  }
+
+  const peacefulTarget=(currentTile&&currentTile.chordSection==='Peaceful')?1:0;
+  peacefulLevel+=(peacefulTarget-peacefulLevel)*(1-Math.exp(-dt*1.8));
+  const windSpawn=WIND_SPAWN_RATE*peacefulLevel*dt;
+  let windToSpawn=Math.floor(windSpawn)+(Math.random()<windSpawn-Math.floor(windSpawn)?1:0);
+  while(windToSpawn-->0){
+    windStreaks.push({x:-60-Math.random()*80,y:Math.random()*window.innerHeight,vx:180+Math.random()*220,baseY:0,phase:Math.random()*Math.PI*2,len:60+Math.random()*90,life:1});
+    const w=windStreaks[windStreaks.length-1];w.baseY=w.y;
+  }
+  for(let i=windStreaks.length-1;i>=0;i--){
+    const w=windStreaks[i];
+    w.x+=w.vx*dt;w.phase+=dt*1.4;
+    w.y=w.baseY+Math.sin(w.phase)*8;
+    if(w.x>window.innerWidth+120)windStreaks.splice(i,1);
+  }
+
+  // ── RENDER ──
+  const sc=devicePixelRatio;ctx.save();ctx.scale(sc,sc);
+  const vw=window.innerWidth,vh=window.innerHeight;
+  const tr=Math.round(55*tenseLevel+10*melancholyLevel+70*tonicLevel+12*peacefulLevel),tg=Math.round(6*tenseLevel+18*melancholyLevel+55*tonicLevel+55*peacefulLevel),tb=Math.round(6*tenseLevel+45*melancholyLevel+10*tonicLevel+22*peacefulLevel);
+  ctx.fillStyle=`rgb(${tr},${tg},${tb})`;
+  ctx.fillRect(0,0,vw,vh);
+
+  const camX=car.x-vw/2,camY=car.y-vh/2;
+  ctx.save();ctx.translate(-camX,-camY);
+
+  // Stars
+  const starChunk=300;
+  const sx0=Math.floor(camX/starChunk)-1,sx1=Math.floor((camX+vw)/starChunk)+1;
+  const sy0=Math.floor(camY/starChunk)-1,sy1=Math.floor((camY+vh)/starChunk)+1;
+  for(let cx=sx0;cx<=sx1;cx++)for(let cy=sy0;cy<=sy1;cy++){
+    for(let i=0;i<STAR_DENSITY;i++){
+      const px=(cx+coordRand(cx,cy,i*3+1))*starChunk;
+      const py=(cy+coordRand(cx,cy,i*3+2))*starChunk;
+      const br=0.25+coordRand(cx,cy,i*3+3)*0.55;
+      ctx.fillStyle=`rgba(255,255,255,${br})`;
+      ctx.beginPath();ctx.arc(px,py,1,0,Math.PI*2);ctx.fill();
+    }
+  }
+
+  // Landmark dots — tonic (gold) and evil (red)
+  const tonicMargin=HEX_SIZE;
+  hexMap.forEach(tile=>{
+    if(!tile.isSeed)return;
+    if(tile.px<camX-tonicMargin||tile.px>camX+vw+tonicMargin||tile.py<camY-tonicMargin||tile.py>camY+vh+tonicMargin)return;
+    ctx.beginPath();ctx.arc(tile.px,tile.py,16,0,Math.PI*2);
+    const sc=SEED_TYPES[tile.seedType]?.color||[200,200,200];
+    ctx.fillStyle=`rgb(${sc[0]},${sc[1]},${sc[2]})`;
+    ctx.fill();
+  });
+
+  // Trail
+  for(let i=1;i<trail.length;i++){const t=trail[i];const a=Math.max(0,0.3-t.age*0.03);if(a<=0)continue;ctx.beginPath();ctx.arc(t.x,t.y,1.5,0,Math.PI*2);ctx.fillStyle=`rgba(255,255,255,${a})`;ctx.fill()}
+
+  // Particles
+  for(const p of particles){ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);ctx.fillStyle=`rgba(${p.r},${p.g},${p.b},${p.life*0.5})`;ctx.fill()}
+
+  // Car
+  ctx.save();ctx.translate(car.x,car.y);ctx.rotate(car.angle);
+  if(currentTile){
+    const gr=28+car.speed*0.12;const bc=currentTile.color;
+    const gg=ctx.createRadialGradient(0,0,0,0,0,gr);
+    gg.addColorStop(0,`rgba(${bc[0]},${bc[1]},${bc[2]},0.2)`);gg.addColorStop(1,`rgba(${bc[0]},${bc[1]},${bc[2]},0)`);
+    ctx.fillStyle=gg;ctx.fillRect(-gr,-gr,gr*2,gr*2);
+  }
+  ctx.beginPath();ctx.moveTo(12,0);ctx.lineTo(-7,-6);ctx.lineTo(-7,6);ctx.closePath();ctx.fillStyle='#fff';ctx.fill();
+  ctx.restore();ctx.restore();
+
+  if(windStreaks.length>0){
+    ctx.save();
+    ctx.strokeStyle=`rgba(220,240,210,${0.4*peacefulLevel})`;
+    ctx.lineWidth=1.1;ctx.lineCap='round';
+    for(const w of windStreaks){
+      ctx.beginPath();
+      ctx.moveTo(w.x,w.y);
+      ctx.bezierCurveTo(w.x+w.len*0.35,w.y-4,w.x+w.len*0.65,w.y+4,w.x+w.len,w.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if(fireworkParticles.length>0){
+    ctx.save();
+    for(const p of fireworkParticles){
+      const a=Math.max(0,Math.min(1,p.life));
+      ctx.fillStyle=`rgba(${p.r},${p.g},${p.b},${a})`;
+      ctx.beginPath();ctx.arc(p.x,p.y,2.2*a+0.6,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if(rainDrops.length>0){
+    ctx.save();
+    ctx.strokeStyle=`rgba(170,200,235,${0.35+0.35*melancholyLevel})`;
+    ctx.lineWidth=1.2;ctx.lineCap='round';
+    for(const d of rainDrops){
+      const ang=Math.atan2(d.vy,d.vx);
+      const ex=d.x+Math.cos(ang)*d.len,ey=d.y+Math.sin(ang)*d.len;
+      ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(ex,ey);ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if(lightningFlash>0.01){
+    if(lightningBolt&&lightningFlash>0.4){
+      ctx.save();
+      ctx.strokeStyle=`rgba(255,255,255,${Math.min(1,lightningFlash*1.2)})`;
+      ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.shadowBlur=24;ctx.shadowColor='rgba(255,220,220,0.9)';
+      for(const seg of lightningBolt){
+        ctx.beginPath();ctx.moveTo(seg[0][0],seg[0][1]);
+        for(let i=1;i<seg.length;i++)ctx.lineTo(seg[i][0],seg[i][1]);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.fillStyle=`rgba(255,255,255,${lightningFlash*0.18})`;
+    ctx.fillRect(0,0,vw,vh);
+  }
+
+  ctx.restore();
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(update);
+</script>
+</body>
+</html>
