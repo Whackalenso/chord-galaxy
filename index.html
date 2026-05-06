@@ -11,8 +11,6 @@
   canvas{display:block;width:100vw;height:100vh;cursor:pointer}
   #ui{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:10}
   #chord-name{font-size:18px;letter-spacing:4px;text-transform:uppercase;opacity:.85;margin-bottom:4px;text-shadow:0 0 20px currentColor}
-  #note-label{font-size:11px;letter-spacing:3px;opacity:.4}
-  #section-label{font-size:9px;letter-spacing:3px;opacity:.5;margin-top:2px;text-transform:uppercase}
   #start-overlay{position:fixed;inset:0;background:#08080c;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;cursor:pointer}
   #start-overlay h1{font-size:36px;letter-spacing:12px;text-transform:uppercase;margin-bottom:12px;font-weight:300}
   #start-overlay p{font-size:12px;letter-spacing:4px;opacity:.35;text-transform:uppercase;margin-bottom:6px}
@@ -29,7 +27,7 @@
   .cycle-label.next{text-align:right}
   .current-name{flex:1;font-size:12px;letter-spacing:4px;text-align:center;color:#eee;font-weight:bold;text-transform:uppercase}
   .xy-row{display:flex;gap:8px;align-items:center;justify-content:center}
-  .axis-y-label{writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;align-self:center}
+  .axis-y-label{writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;align-self:center;min-width:14px}
   .axis-x-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;text-align:center;padding-top:4px}
   #xy-pad{position:relative;width:140px;height:140px;border:1px solid #555;background:#161616;cursor:crosshair;user-select:none;touch-action:none}
   #xy-pad::before,#xy-pad::after{content:'';position:absolute;background:#262626;pointer-events:none}
@@ -37,7 +35,6 @@
   #xy-pad::after{top:0;bottom:0;left:50%;width:1px}
   #xy-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:#eee;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 8px rgba(255,255,255,.5);left:50%;top:50%}
   #off-state{font-size:28px;letter-spacing:8px;text-align:center;padding:42px 0;opacity:.5;color:#888;font-weight:bold}
-  #chord-knobs{display:flex;gap:18px;justify-content:center;padding-top:4px}
   .knob-cell{display:flex;flex-direction:column;align-items:center;gap:5px}
   .knob{width:42px;height:42px;cursor:ns-resize;user-select:none;touch-action:none}
   .knob svg{display:block;width:100%;height:100%}
@@ -45,24 +42,32 @@
   .knob .arc{fill:none;stroke:#aaa;stroke-width:3;stroke-linecap:round}
   .knob .tick{stroke:#eee;stroke-width:2;stroke-linecap:round}
   .knob-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;text-align:center;line-height:1.3}
+  #controls-hint{position:fixed;bottom:12px;left:12px;z-index:20;display:flex;flex-direction:column;gap:4px;pointer-events:none;font:10px 'Courier New',monospace;color:#aaa;opacity:.5}
+  #controls-hint .hint-row{display:flex;align-items:center;gap:8px}
+  #controls-hint .key{display:inline-block;min-width:48px;letter-spacing:2px;text-transform:uppercase;border:1px solid #444;padding:2px 6px;text-align:center;color:#ddd;background:rgba(20,20,20,.5)}
+  #controls-hint .desc{letter-spacing:2px;text-transform:uppercase;opacity:.85}
 </style>
 </head>
 <body>
 <div id="start-overlay" onclick="startAudio()">
   <h1>Chord Galaxy</h1>
-  <p>WASD to fly</p>
+  <p>Click to start</p>
 </div>
 <canvas id="c"></canvas>
 <div id="ui">
   <div id="chord-name">—</div>
-  <div id="note-label">—</div>
-  <div id="section-label">—</div>
 </div>
 <div id="midi-row" style="position:fixed;top:10px;left:10px;z-index:20;font:11px 'Courier New',monospace;color:#aaa;display:flex;align-items:center;gap:6px">
   <span>MIDI</span>
   <select id="midi-picker" style="background:#111;color:#ccc;border:1px solid #444;font:11px 'Courier New',monospace;padding:2px 4px"></select>
   <span>ch</span>
   <input id="midi-ch" type="number" min="1" max="16" value="1" style="width:34px;background:#111;color:#ccc;border:1px solid #444;font:11px 'Courier New',monospace;padding:2px 4px">
+</div>
+<div id="controls-hint">
+  <div class="hint-row"><span class="key">WASD</span><span class="desc">Fly</span></div>
+  <div class="hint-row"><span class="key">&#9664; &#9654;</span><span class="desc">Cycle Instrument</span></div>
+  <div class="hint-row"><span class="key">SPACE</span><span class="desc">Toggle Instrument</span></div>
+  <div class="hint-row"><span class="key">MOUSE</span><span class="desc">Adjust Parameters</span></div>
 </div>
 <div id="sound-controls">
   <div class="cycle-row">
@@ -71,34 +76,12 @@
     <button id="next-label" class="cycle-label next" type="button">Arp &#9654;</button>
   </div>
   <div id="instrument-body" class="xy-row">
-    <span class="axis-y-label">Mouse Y</span>
+    <span id="axis-y-label" class="axis-y-label">Filter Cutoff</span>
     <div id="xy-pad" role="slider" aria-label="Mouse XY pad" tabindex="0">
       <div id="xy-dot"></div>
     </div>
   </div>
-  <div id="axis-x-label" class="axis-x-label">Mouse X</div>
-  <div id="chord-knobs">
-    <div class="knob-cell">
-      <div id="knob-lfo-rate" class="knob" data-value="0.3" role="slider" aria-label="Chord LPF LFO rate" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.3">
-        <svg viewBox="0 0 40 40">
-          <circle class="track" cx="20" cy="20" r="15"></circle>
-          <path class="arc" d=""></path>
-          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
-        </svg>
-      </div>
-      <div class="knob-label">LFO<br>Rate</div>
-    </div>
-    <div class="knob-cell">
-      <div id="knob-lfo-depth" class="knob" data-value="0" role="slider" aria-label="Chord LPF LFO depth" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
-        <svg viewBox="0 0 40 40">
-          <circle class="track" cx="20" cy="20" r="15"></circle>
-          <path class="arc" d=""></path>
-          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
-        </svg>
-      </div>
-      <div class="knob-label">LFO<br>Depth</div>
-    </div>
-  </div>
+  <div id="axis-x-label" class="axis-x-label">Filter Cutoff</div>
   <div id="off-state" hidden>OFF</div>
 </div>
 <script>
@@ -116,12 +99,11 @@ const DEFAULT_ARP_X=0.2;        // arp LPF cutoff (mapped LPF_ARP_MIN_HZ..LPF_AR
 const DEFAULT_ARP_Y=0.5;        // arp decay (mapped via arpDecayKnobToS)
 const DEFAULT_KICK_X=0.4;       // kick tempo (mapped to KICK_BPM_MIN..KICK_BPM_MAX)
 const DEFAULT_KICK_Y=0.4;       // kick sidechain depth (0 = no pumping, 1 = full)
-const DEFAULT_LFO_RATE=0.5;     // chord LFO rate knob
-const DEFAULT_LFO_DEPTH=0.15;    // chord LFO depth knob
+const DEFAULT_LFO_RATE=0.5;     // chord LFO rate (fixed; no UI knob)
+const DEFAULT_LFO_DEPTH=0.15;   // chord LFO depth (fixed; no UI knob)
 const POINTER_SENSITIVITY=1/180;// pad fraction per pixel of locked-pointer movement
-
-document.getElementById('knob-lfo-rate').dataset.value=DEFAULT_LFO_RATE;
-document.getElementById('knob-lfo-depth').dataset.value=DEFAULT_LFO_DEPTH;
+const MIDI_ENABLED=false;       // master switch for external MIDI output (picker UI + note/CC sending)
+if(!MIDI_ENABLED){const _midiRow=document.getElementById('midi-row');if(_midiRow)_midiRow.remove();}
 
 // ═══════════════════════════════════════
 // SOUND CONTROLS UI (knob component — audio side is wired in startAudio)
@@ -696,6 +678,9 @@ const LPF_CHORD_MAX_HZ=18000;
 const LPF_ARP_MIN_HZ=800;
 const LPF_ARP_MAX_HZ=12000;
 const LPF_Q=0.7;
+// Chord filter Q is driven by the chord pad's Y axis (0..1 → CHORD_Q_MIN..MAX).
+const CHORD_Q_MIN=0.7;
+const CHORD_Q_MAX=12;
 
 // Chord LPF LFO — modulates chordFilter.detune (cents). 0 cents = unmodulated;
 // ±1200 = ±1 octave from the knob-set base cutoff.
@@ -711,10 +696,14 @@ const ARP_ATTACK=0.005;           // env attack, seconds
 const ARP_DECAY_MIN_S=0.1;       // decay knob value 0 → very plucky
 const ARP_DECAY_MAX_S=1.5;        // decay knob value 1 → long sustaining
 const ARP_PEAK_GAIN=0.6;          // env peak amplitude (pre-bus)
-const ARP_BUS_GAIN=0.4;          // arp bus level into master
+const ARP_BUS_GAIN=0.8;          // arp bus level into master
 const ARP_DETUNE=0;               // cents
 const ARP_OCTAVE_OFFSET=0;       // semitones added to each chord note
 const ARP_TOGGLE_FADE=0.03;       // chord toggle fade time, seconds
+// Arp lags the kick by this much so the sidechain duck has already pulled
+// down by the time the arp's attack starts — prevents a sliver of un-ducked
+// arp transient leaking out right before the pump.
+const ARP_KICK_DELAY_MS=25;
 
 // Kick drum — sample playback (kick.wav loaded once, retriggered each beat)
 const KICK_SAMPLE_URL='kick.wav';
@@ -742,6 +731,7 @@ const VITAL_FADE_OUT=0.55;        // matches preset env_1_release
 function midiToFreq(m){return 440*Math.pow(2,(m-69)/12)}
 function lpfKnobToHz(v,minHz,maxHz){return minHz*Math.pow(maxHz/minHz,Math.max(0,Math.min(1,v)))}
 function chordLpfHz(v){return lpfKnobToHz(v,LPF_CHORD_MIN_HZ,LPF_CHORD_MAX_HZ)}
+function chordQ(v){return CHORD_Q_MIN+(CHORD_Q_MAX-CHORD_Q_MIN)*Math.max(0,Math.min(1,v))}
 function arpLpfHz(v){return lpfKnobToHz(v,LPF_ARP_MIN_HZ,LPF_ARP_MAX_HZ)}
 function lfoRateKnobToHz(v){return LFO_RATE_MIN_HZ*Math.pow(LFO_RATE_MAX_HZ/LFO_RATE_MIN_HZ,Math.max(0,Math.min(1,v)))}
 function lfoDepthKnobToCents(v){return Math.max(0,Math.min(1,v))*LFO_DEPTH_MAX_CENTS}
@@ -760,6 +750,12 @@ let midiOutput=null,prevMidiNotes=[];
 // Instrument panel — single-instrument view with per-instrument XY pad positions.
 const INSTRUMENTS=['chords','arp','kick'];
 const INSTRUMENT_LABELS={chords:'Chords',arp:'Arp',kick:'Kick'};
+// Per-instrument axis labels — what each axis of the XY pad controls.
+const AXIS_LABELS={
+  chords:{x:'Filter Cutoff',y:'Resonance'},
+  arp:{x:'Filter Cutoff',y:'Sustain'},
+  kick:{x:'Tempo',y:'Sidechain'},
+};
 let currentInstrument='chords';
 const instrumentEnabled={
   chords:DEFAULT_CHORDS_ENABLED,
@@ -792,7 +788,7 @@ function startAudio(){
 
   // Chord bus: (basicMix | vitalChain) → chordFilter (lowpass) → chordGain (toggle mute) → master
   chordFilter=audioCtx.createBiquadFilter();
-  chordFilter.type='lowpass';chordFilter.Q.value=LPF_Q;
+  chordFilter.type='lowpass';chordFilter.Q.value=chordQ(xyPos.chords.y);
   chordFilter.frequency.value=chordLpfHz(xyPos.chords.x);
   chordGain=audioCtx.createGain();
   chordGain.gain.value=instrumentEnabled.chords?1:0;
@@ -804,9 +800,9 @@ function startAudio(){
   // LFO modulating chord filter cutoff (sums into chordFilter.detune in cents)
   chordLfo=audioCtx.createOscillator();
   chordLfo.type=LFO_WAVE;
-  chordLfo.frequency.value=lfoRateKnobToHz(parseFloat(document.getElementById('knob-lfo-rate').dataset.value));
+  chordLfo.frequency.value=lfoRateKnobToHz(DEFAULT_LFO_RATE);
   chordLfoDepth=audioCtx.createGain();
-  chordLfoDepth.gain.value=lfoDepthKnobToCents(parseFloat(document.getElementById('knob-lfo-depth').dataset.value));
+  chordLfoDepth.gain.value=lfoDepthKnobToCents(DEFAULT_LFO_DEPTH);
   chordLfo.connect(chordLfoDepth);chordLfoDepth.connect(chordFilter.detune);
   chordLfo.start();
 
@@ -960,7 +956,7 @@ function fireKickAndScheduleNext(){
     const sinceArpMs=(lastKickAt-lastArpAt)*1000;
     clearTimeout(arpTimer);
     if(sinceArpMs>=arpIntervalMs*0.5){
-      fireArpAndScheduleNext();
+      arpTimer=setTimeout(fireArpAndScheduleNext,ARP_KICK_DELAY_MS);
     }else{
       arpTimer=setTimeout(fireArpAndScheduleNext,arpIntervalMs-sinceArpMs);
     }
@@ -997,14 +993,6 @@ function rescheduleKick(){
 function wireSoundControls(){
   // Apply current XY positions to live audio nodes (chord/arp filters, kick interval).
   applyXYParams();
-  document.getElementById('knob-lfo-rate').addEventListener('change',e=>{
-    if(!chordLfo||!audioCtx)return;
-    chordLfo.frequency.setTargetAtTime(lfoRateKnobToHz(e.detail.value),audioCtx.currentTime,0.02);
-  });
-  document.getElementById('knob-lfo-depth').addEventListener('change',e=>{
-    if(!chordLfoDepth||!audioCtx)return;
-    chordLfoDepth.gain.setTargetAtTime(lfoDepthKnobToCents(e.detail.value),audioCtx.currentTime,0.02);
-  });
 }
 
 function setChord(notes){
@@ -1024,6 +1012,7 @@ function setChord(notes){
 }
 
 async function initMIDI(){
+  if(!MIDI_ENABLED)return;
   if(!navigator.requestMIDIAccess)return;
   try{
     const access=await navigator.requestMIDIAccess();
@@ -1033,6 +1022,7 @@ async function initMIDI(){
 }
 
 function buildMIDIPicker(access){
+  if(!MIDI_ENABLED)return;
   const sel=document.getElementById('midi-picker');
   if(!sel)return;
   const prev=sel.value;
@@ -1048,6 +1038,7 @@ function buildMIDIPicker(access){
 }
 
 function sendMIDIChord(notes){
+  if(!MIDI_ENABLED)return;
   if(!midiOutput)return;
   const ch=(parseInt(document.getElementById('midi-ch')?.value)||1)-1;
   const changes=[];
@@ -1063,6 +1054,7 @@ function sendMIDIChord(notes){
 }
 
 function sendMIDICC(channel,cc,value){
+  if(!MIDI_ENABLED)return;
   if(!midiOutput)return;
   const ch=Math.max(0,Math.min(15,channel-1));
   midiOutput.send([0xB0|ch,cc,value]);
@@ -1085,6 +1077,7 @@ function applyXYParams(){
   if(cur==='chords'){
     if(audioCtx&&chordFilter){
       chordFilter.frequency.setTargetAtTime(chordLpfHz(p.x),audioCtx.currentTime,0.02);
+      chordFilter.Q.setTargetAtTime(chordQ(p.y),audioCtx.currentTime,0.02);
     }
   }else if(cur==='arp'){
     if(audioCtx&&arpFilter){
@@ -1115,11 +1108,13 @@ function renderPanel(){
   if(curEl)curEl.textContent=INSTRUMENT_LABELS[cur];
   const body=document.getElementById('instrument-body');
   const xLabel=document.getElementById('axis-x-label');
-  const knobs=document.getElementById('chord-knobs');
+  const yLabel=document.getElementById('axis-y-label');
   const off=document.getElementById('off-state');
+  const axes=AXIS_LABELS[cur]||{x:'',y:''};
+  if(xLabel)xLabel.textContent=axes.x;
+  if(yLabel)yLabel.textContent=axes.y;
   if(body)body.style.display=enabled?'':'none';
   if(xLabel)xLabel.style.display=enabled?'':'none';
-  if(knobs)knobs.style.display=(enabled&&cur==='chords')?'':'none';
   if(off)off.hidden=enabled;
   if(enabled){
     const p=xyPos[cur];
@@ -1219,7 +1214,7 @@ document.addEventListener('click',()=>{if(started)tryLockPointer();});
 // CAR & INPUT
 // ═══════════════════════════════════════
 const centerPx=hexToPixel(0,0);
-const car={x:centerPx.x,y:centerPx.y+60,angle:-Math.PI/2,vx:0,vy:0,speed:0};
+const car={x:centerPx.x,y:centerPx.y-20,angle:-Math.PI/2,vx:0,vy:0,speed:0};
 const keyState={};
 window.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
@@ -1389,10 +1384,6 @@ function update(now){
     const cn=document.getElementById('chord-name');
     cn.textContent=currentTile.chordName?currentTile.chordName.split(':')[1]:currentTile.noteLabel;
     cn.style.color=`rgb(${currentTile.color.join(',')})`;
-    document.getElementById('note-label').textContent=currentTile.noteLabel;
-    const sectLine=currentTile.chordSection||'';
-    const seedTag=currentTile.isSeed?` · ${SEED_TYPES[currentTile.seedType]?.label||''}`:'';
-    document.getElementById('section-label').textContent=sectLine+seedTag;
   }
 
   const tenseTarget=(currentTile&&currentTile.chordSection==='Evil')?1:0;
