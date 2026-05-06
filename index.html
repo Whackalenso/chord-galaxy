@@ -7,6 +7,7 @@
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:#000;overflow:hidden;font-family:'Courier New',monospace;color:#fff}
+  body.audio-started,body.audio-started *{cursor:none!important}
   canvas{display:block;width:100vw;height:100vh;cursor:pointer}
   #ui{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:10}
   #chord-name{font-size:18px;letter-spacing:4px;text-transform:uppercase;opacity:.85;margin-bottom:4px;text-shadow:0 0 20px currentColor}
@@ -19,14 +20,24 @@
   #legend .item{font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.3;display:flex;align-items:center;gap:4px}
   #legend .dot{width:8px;height:8px;border-radius:50%}
   #legend .ring{width:8px;height:8px;border-radius:50%;border:1.5px solid}
-  #sound-controls{position:fixed;top:10px;right:10px;z-index:20;font:11px 'Courier New',monospace;color:#aaa;background:rgba(17,17,17,.85);border:1px solid #444;padding:10px 12px;display:flex;flex-direction:column;gap:10px;min-width:180px}
-  #sound-controls .panel-header{font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.5;text-align:center;border-bottom:1px solid #2a2a2a;padding-bottom:6px}
-  #sound-controls .toggle-row{display:flex;gap:6px;justify-content:space-between}
-  #sound-controls .knob-row{display:flex;gap:8px;justify-content:space-around;padding-top:4px}
-  .sound-toggle{flex:1;font:10px 'Courier New',monospace;letter-spacing:2px;text-transform:uppercase;color:#666;background:transparent;border:1px solid #333;padding:5px 6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;transition:background .12s,color .12s,border-color .12s}
-  .sound-toggle:hover{border-color:#555;color:#999}
-  .sound-toggle.on{background:#2a2a2a;color:#eee;border-color:#555}
-  .sound-toggle .indicator{font-size:10px;opacity:.85}
+  #sound-controls{position:fixed;top:10px;right:10px;z-index:20;font:11px 'Courier New',monospace;color:#aaa;background:rgba(17,17,17,.85);border:1px solid #444;padding:10px 12px;display:flex;flex-direction:column;gap:10px;min-width:220px;align-items:center}
+  #sound-controls .panel-header{font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.5;text-align:center;padding-bottom:4px;width:100%}
+  .cycle-row{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;font-size:9px;letter-spacing:2px;text-transform:uppercase}
+  .cycle-label{flex:1;opacity:.5;cursor:pointer;transition:opacity .12s,color .12s;white-space:nowrap;color:#888;background:transparent;border:none;font:inherit;letter-spacing:inherit;text-transform:inherit;padding:0}
+  .cycle-label:hover{opacity:.95;color:#ddd}
+  .cycle-label.prev{text-align:left}
+  .cycle-label.next{text-align:right}
+  .current-name{flex:1;font-size:12px;letter-spacing:4px;text-align:center;color:#eee;font-weight:bold;text-transform:uppercase}
+  .xy-row{display:flex;gap:8px;align-items:center;justify-content:center}
+  .axis-y-label{writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;align-self:center}
+  .axis-x-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;text-align:center;padding-top:4px}
+  #xy-pad{position:relative;width:140px;height:140px;border:1px solid #555;background:#161616;cursor:crosshair;user-select:none;touch-action:none}
+  #xy-pad::before,#xy-pad::after{content:'';position:absolute;background:#262626;pointer-events:none}
+  #xy-pad::before{left:0;right:0;top:50%;height:1px}
+  #xy-pad::after{top:0;bottom:0;left:50%;width:1px}
+  #xy-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:#eee;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 8px rgba(255,255,255,.5);left:50%;top:50%}
+  #off-state{font-size:28px;letter-spacing:8px;text-align:center;padding:42px 0;opacity:.5;color:#888;font-weight:bold}
+  #chord-knobs{display:flex;gap:18px;justify-content:center;padding-top:4px}
   .knob-cell{display:flex;flex-direction:column;align-items:center;gap:5px}
   .knob{width:42px;height:42px;cursor:ns-resize;user-select:none;touch-action:none}
   .knob svg{display:block;width:100%;height:100%}
@@ -54,43 +65,19 @@
   <input id="midi-ch" type="number" min="1" max="16" value="1" style="width:34px;background:#111;color:#ccc;border:1px solid #444;font:11px 'Courier New',monospace;padding:2px 4px">
 </div>
 <div id="sound-controls">
-  <div class="panel-header">Sound</div>
-  <div class="toggle-row">
-    <button id="toggle-chords" class="sound-toggle on" type="button" aria-pressed="true">
-      <span>Chords</span><span class="indicator">&#9679;</span>
-    </button>
-    <button id="toggle-arp" class="sound-toggle" type="button" aria-pressed="false">
-      <span>Arp</span><span class="indicator">&#9675;</span>
-    </button>
+  <div class="cycle-row">
+    <button id="prev-label" class="cycle-label prev" type="button">&#9664; Kick</button>
+    <span id="current-name" class="current-name">Chords</span>
+    <button id="next-label" class="cycle-label next" type="button">Arp &#9654;</button>
   </div>
-  <div class="toggle-row">
-    <button id="toggle-voice" class="sound-toggle mode-toggle on" type="button" data-mode="basic">
-      <span>Voice</span><span class="voice-label">Basic</span>
-    </button>
-  </div>
-  <div class="knob-row">
-    <div class="knob-cell">
-      <div id="knob-chord-lpf" class="knob" data-value="1" role="slider" aria-label="Chord low-pass filter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1">
-        <svg viewBox="0 0 40 40">
-          <circle class="track" cx="20" cy="20" r="15"></circle>
-          <path class="arc" d=""></path>
-          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
-        </svg>
-      </div>
-      <div class="knob-label">LPF<br>Chords</div>
-    </div>
-    <div class="knob-cell">
-      <div id="knob-arp-lpf" class="knob" data-value="1" role="slider" aria-label="Arpeggiator low-pass filter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1">
-        <svg viewBox="0 0 40 40">
-          <circle class="track" cx="20" cy="20" r="15"></circle>
-          <path class="arc" d=""></path>
-          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
-        </svg>
-      </div>
-      <div class="knob-label">LPF<br>Arp</div>
+  <div id="instrument-body" class="xy-row">
+    <span class="axis-y-label">Mouse Y</span>
+    <div id="xy-pad" role="slider" aria-label="Mouse XY pad" tabindex="0">
+      <div id="xy-dot"></div>
     </div>
   </div>
-  <div class="knob-row">
+  <div id="axis-x-label" class="axis-x-label">Mouse X</div>
+  <div id="chord-knobs">
     <div class="knob-cell">
       <div id="knob-lfo-rate" class="knob" data-value="0.3" role="slider" aria-label="Chord LPF LFO rate" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.3">
         <svg viewBox="0 0 40 40">
@@ -112,43 +99,34 @@
       <div class="knob-label">LFO<br>Depth</div>
     </div>
   </div>
-  <div class="knob-row">
-    <div class="knob-cell">
-      <div id="knob-arp-decay" class="knob" data-value="0.51" role="slider" aria-label="Arpeggiator decay time" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.51">
-        <svg viewBox="0 0 40 40">
-          <circle class="track" cx="20" cy="20" r="15"></circle>
-          <path class="arc" d=""></path>
-          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
-        </svg>
-      </div>
-      <div class="knob-label">Arp<br>Decay</div>
-    </div>
-  </div>
+  <div id="off-state" hidden>OFF</div>
 </div>
 <script>
 // ═══════════════════════════════════════
-// SOUND CONTROLS UI (toggle/knob input — audio side is wired in startAudio)
+// PANEL DEFAULTS — initial values for the instrument panel.
+// Tweak these to change startup state without touching the rest of the code.
+// XY values are 0..1 (pad coordinates); enabled values are booleans.
+// ═══════════════════════════════════════
+const DEFAULT_CHORDS_ENABLED=true;
+const DEFAULT_ARP_ENABLED=false;
+const DEFAULT_KICK_ENABLED=false;
+const DEFAULT_CHORDS_X=0.2;     // chord LPF cutoff (mapped LPF_CHORD_MIN_HZ..LPF_CHORD_MAX_HZ)
+const DEFAULT_CHORDS_Y=0.5;     // unused for chords
+const DEFAULT_ARP_X=0.2;        // arp LPF cutoff (mapped LPF_ARP_MIN_HZ..LPF_ARP_MAX_HZ)
+const DEFAULT_ARP_Y=0.5;        // arp decay (mapped via arpDecayKnobToS)
+const DEFAULT_KICK_X=0.4;       // kick tempo (mapped to KICK_BPM_MIN..KICK_BPM_MAX)
+const DEFAULT_KICK_Y=0.4;       // kick sidechain depth (0 = no pumping, 1 = full)
+const DEFAULT_LFO_RATE=0.5;     // chord LFO rate knob
+const DEFAULT_LFO_DEPTH=0.15;    // chord LFO depth knob
+const POINTER_SENSITIVITY=1/180;// pad fraction per pixel of locked-pointer movement
+
+document.getElementById('knob-lfo-rate').dataset.value=DEFAULT_LFO_RATE;
+document.getElementById('knob-lfo-depth').dataset.value=DEFAULT_LFO_DEPTH;
+
+// ═══════════════════════════════════════
+// SOUND CONTROLS UI (knob component — audio side is wired in startAudio)
 // ═══════════════════════════════════════
 (function(){
-  document.querySelectorAll('.sound-toggle:not(.mode-toggle)').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const on=btn.classList.toggle('on');
-      btn.setAttribute('aria-pressed',on?'true':'false');
-      const ind=btn.querySelector('.indicator');
-      if(ind)ind.innerHTML=on?'&#9679;':'&#9675;';
-      btn.dispatchEvent(new CustomEvent('change',{bubbles:true,detail:{on}}));
-    });
-  });
-  document.querySelectorAll('.mode-toggle').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const cur=btn.dataset.mode||'basic';
-      const next=cur==='basic'?'vital':'basic';
-      btn.dataset.mode=next;
-      const lbl=btn.querySelector('.voice-label');
-      if(lbl)lbl.textContent=next.charAt(0).toUpperCase()+next.slice(1);
-      btn.dispatchEvent(new CustomEvent('change',{bubbles:true,detail:{mode:next}}));
-    });
-  });
   const SWEEP=270,START=-225;
   function polar(cx,cy,r,deg){const a=deg*Math.PI/180;return[cx+r*Math.cos(a),cy+r*Math.sin(a)]}
   function renderKnob(el){
@@ -711,10 +689,12 @@ function noteDiff(a,b){let d=0;for(let i=0;i<a.length;i++)if(a[i]!==b[i])d++;ret
 // ═══════════════════════════════════════
 const GLIDE_TIME=0.4;
 
-// Low-pass filter mapping (shared by chord & arp filter knobs)
-// Knob value 0..1 maps log-scale onto LPF_MIN_HZ..LPF_MAX_HZ
-const LPF_MIN_HZ=80;
-const LPF_MAX_HZ=18000;
+// Low-pass filter — separate ranges per instrument so each pad sweep
+// hits a useful tonal window. Knob value 0..1 maps log-scale onto MIN..MAX.
+const LPF_CHORD_MIN_HZ=80;
+const LPF_CHORD_MAX_HZ=18000;
+const LPF_ARP_MIN_HZ=800;
+const LPF_ARP_MAX_HZ=12000;
 const LPF_Q=0.7;
 
 // Chord LPF LFO — modulates chordFilter.detune (cents). 0 cents = unmodulated;
@@ -726,15 +706,27 @@ const LFO_DEPTH_MAX_CENTS=2400;   // knob value 1 → ±2 octaves of cutoff swee
 
 // Arpeggiator synth — sawtooth osc with attack/decay envelope (no sustain)
 const ARP_OSC_TYPE='sawtooth';
-const ARP_RATE_MS=150;            // ms between notes (step duration)
+const ARP_STEPS_PER_KICK=4;       // arp subdivides each kick beat into N steps (4 = 16ths)
 const ARP_ATTACK=0.005;           // env attack, seconds
-const ARP_DECAY_MIN_S=0.02;       // decay knob value 0 → very plucky
+const ARP_DECAY_MIN_S=0.1;       // decay knob value 0 → very plucky
 const ARP_DECAY_MAX_S=1.5;        // decay knob value 1 → long sustaining
 const ARP_PEAK_GAIN=0.6;          // env peak amplitude (pre-bus)
-const ARP_BUS_GAIN=0.22;          // arp bus level into master
+const ARP_BUS_GAIN=0.4;          // arp bus level into master
 const ARP_DETUNE=0;               // cents
 const ARP_OCTAVE_OFFSET=0;       // semitones added to each chord note
 const ARP_TOGGLE_FADE=0.03;       // chord toggle fade time, seconds
+
+// Kick drum — sample playback (kick.wav loaded once, retriggered each beat)
+const KICK_SAMPLE_URL='kick.wav';
+const KICK_BPM_MIN=80;
+const KICK_BPM_MAX=120;
+const KICK_BUS_GAIN=4;            // overall kick loudness
+const KICK_TAIL_FADE_S=0.008;     // tail fade-out length (seconds) — kills end-of-sample click
+
+// Sidechain ducking — chord/arp share a duckGain pumped on each kick.
+// Floor is runtime-controlled by kick Mouse Y (1 = no duck, 0 = full mute).
+const SIDECHAIN_ATTACK=0.002;     // duck snap, seconds
+const SIDECHAIN_RELEASE=0.5;     // pump-back release, seconds
 
 // Vital-preset pad (approximation of chords-vital-preset.vital — single saw osc,
 // 4-voice unison, lowpass filter ≈170 Hz, slow attack. No FX active in source preset.)
@@ -748,7 +740,9 @@ const VITAL_FADE_IN=0.22;         // matches preset env_1_attack
 const VITAL_FADE_OUT=0.55;        // matches preset env_1_release
 
 function midiToFreq(m){return 440*Math.pow(2,(m-69)/12)}
-function lpfKnobToHz(v){return LPF_MIN_HZ*Math.pow(LPF_MAX_HZ/LPF_MIN_HZ,Math.max(0,Math.min(1,v)))}
+function lpfKnobToHz(v,minHz,maxHz){return minHz*Math.pow(maxHz/minHz,Math.max(0,Math.min(1,v)))}
+function chordLpfHz(v){return lpfKnobToHz(v,LPF_CHORD_MIN_HZ,LPF_CHORD_MAX_HZ)}
+function arpLpfHz(v){return lpfKnobToHz(v,LPF_ARP_MIN_HZ,LPF_ARP_MAX_HZ)}
 function lfoRateKnobToHz(v){return LFO_RATE_MIN_HZ*Math.pow(LFO_RATE_MAX_HZ/LFO_RATE_MIN_HZ,Math.max(0,Math.min(1,v)))}
 function lfoDepthKnobToCents(v){return Math.max(0,Math.min(1,v))*LFO_DEPTH_MAX_CENTS}
 function arpDecayKnobToS(v){return ARP_DECAY_MIN_S*Math.pow(ARP_DECAY_MAX_S/ARP_DECAY_MIN_S,Math.max(0,Math.min(1,v)))}
@@ -756,11 +750,30 @@ function arpDecayKnobToS(v){return ARP_DECAY_MIN_S*Math.pow(ARP_DECAY_MAX_S/ARP_
 let audioCtx=null,voices=[],gainNode=null,started=false;
 let chordFilter=null,chordGain=null,chordLfo=null,chordLfoDepth=null;
 let basicMix=null,vitalMix=null,vitalFilter=null,vitalVoices=[];
-let chordVoiceMode='basic';
+let chordVoiceMode='vital';
 let arpOsc=null,arpEnv=null,arpFilter=null,arpBusGain=null;
+let kickBuffer=null,kickBusGain=null,duckGain=null,kickTimer=null,lastKickAt=0;
 let currentChordNotes=[48,52,55,60,67];
-let arpStep=0,arpInterval=null,arpDecaySeconds=0.18;
+let arpStep=0,arpTimer=null,lastArpAt=0,arpIntervalMs=150,arpDecaySeconds=0.18;
 let midiOutput=null,prevMidiNotes=[];
+
+// Instrument panel — single-instrument view with per-instrument XY pad positions.
+const INSTRUMENTS=['chords','arp','kick'];
+const INSTRUMENT_LABELS={chords:'Chords',arp:'Arp',kick:'Kick'};
+let currentInstrument='chords';
+const instrumentEnabled={
+  chords:DEFAULT_CHORDS_ENABLED,
+  arp:DEFAULT_ARP_ENABLED,
+  kick:DEFAULT_KICK_ENABLED,
+};
+const xyPos={
+  chords:{x:DEFAULT_CHORDS_X,y:DEFAULT_CHORDS_Y},
+  arp:{x:DEFAULT_ARP_X,y:DEFAULT_ARP_Y},
+  kick:{x:DEFAULT_KICK_X,y:DEFAULT_KICK_Y},
+};
+let kickIntervalMs=60000/(KICK_BPM_MIN+(KICK_BPM_MAX-KICK_BPM_MIN)*xyPos.kick.x);
+let sidechainDuckFloor=1-xyPos.kick.y;
+arpIntervalMs=kickIntervalMs/ARP_STEPS_PER_KICK;
 
 function startAudio(){
   if(started)return;started=true;
@@ -771,7 +784,7 @@ function startAudio(){
   const imp=audioCtx.createBuffer(2,len,rate);
   for(let ch=0;ch<2;ch++){const d=imp.getChannelData(ch);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.2)}
   rev.buffer=imp;
-  gainNode=audioCtx.createGain();gainNode.gain.value=0.18;
+  gainNode=audioCtx.createGain();gainNode.gain.value=0.5;
   const dry=audioCtx.createGain();dry.gain.value=0.45;
   const wet=audioCtx.createGain();wet.gain.value=0.55;
   gainNode.connect(dry);dry.connect(audioCtx.destination);
@@ -780,10 +793,13 @@ function startAudio(){
   // Chord bus: (basicMix | vitalChain) → chordFilter (lowpass) → chordGain (toggle mute) → master
   chordFilter=audioCtx.createBiquadFilter();
   chordFilter.type='lowpass';chordFilter.Q.value=LPF_Q;
-  chordFilter.frequency.value=lpfKnobToHz(parseFloat(document.getElementById('knob-chord-lpf').dataset.value));
+  chordFilter.frequency.value=chordLpfHz(xyPos.chords.x);
   chordGain=audioCtx.createGain();
-  chordGain.gain.value=document.getElementById('toggle-chords').classList.contains('on')?1:0;
-  chordFilter.connect(chordGain);chordGain.connect(gainNode);
+  chordGain.gain.value=instrumentEnabled.chords?1:0;
+  // duckGain — shared sidechain target; kick triggers ramp this down then back up
+  duckGain=audioCtx.createGain();duckGain.gain.value=1;
+  duckGain.connect(gainNode);
+  chordFilter.connect(chordGain);chordGain.connect(duckGain);
 
   // LFO modulating chord filter cutoff (sums into chordFilter.detune in cents)
   chordLfo=audioCtx.createOscillator();
@@ -794,11 +810,11 @@ function startAudio(){
   chordLfo.connect(chordLfoDepth);chordLfoDepth.connect(chordFilter.detune);
   chordLfo.start();
 
-  // Voice-mode crossfade buses
-  chordVoiceMode=document.getElementById('toggle-voice').dataset.mode||'basic';
-  basicMix=audioCtx.createGain();basicMix.gain.value=chordVoiceMode==='basic'?1:0;
+  // Voice-mode locked to 'vital' — basic voice path retained but muted.
+  chordVoiceMode='vital';
+  basicMix=audioCtx.createGain();basicMix.gain.value=0;
   basicMix.connect(chordFilter);
-  vitalMix=audioCtx.createGain();vitalMix.gain.value=chordVoiceMode==='vital'?1:0;
+  vitalMix=audioCtx.createGain();vitalMix.gain.value=1;
   vitalFilter=audioCtx.createBiquadFilter();
   vitalFilter.type='lowpass';vitalFilter.frequency.value=VITAL_FILTER_HZ;vitalFilter.Q.value=VITAL_FILTER_Q;
   vitalFilter.connect(vitalMix);vitalMix.connect(chordFilter);
@@ -842,36 +858,55 @@ function startAudio(){
   arpEnv=audioCtx.createGain();arpEnv.gain.value=0;
   arpFilter=audioCtx.createBiquadFilter();
   arpFilter.type='lowpass';arpFilter.Q.value=LPF_Q;
-  arpFilter.frequency.value=lpfKnobToHz(parseFloat(document.getElementById('knob-arp-lpf').dataset.value));
+  arpFilter.frequency.value=arpLpfHz(xyPos.arp.x);
   arpBusGain=audioCtx.createGain();arpBusGain.gain.value=ARP_BUS_GAIN;
-  arpOsc.connect(arpEnv);arpEnv.connect(arpFilter);arpFilter.connect(arpBusGain);arpBusGain.connect(gainNode);
-  arpDecaySeconds=arpDecayKnobToS(parseFloat(document.getElementById('knob-arp-decay').dataset.value));
+  arpOsc.connect(arpEnv);arpEnv.connect(arpFilter);arpFilter.connect(arpBusGain);arpBusGain.connect(duckGain);
+  arpDecaySeconds=arpDecayKnobToS(xyPos.arp.y);
   arpOsc.start();
-  if(document.getElementById('toggle-arp').classList.contains('on'))startArpLoop();
+  if(instrumentEnabled.arp)startArpLoop();
+
+  // Kick: AudioBufferSource (kick.wav) → kickBusGain → kickDryOut → destination.
+  // Dedicated dry-only path bypasses both duckGain and the reverb send so the
+  // kick stays tight (no reverb tail). Matches prior dry loudness: gainNode * dry.
+  kickBusGain=audioCtx.createGain();kickBusGain.gain.value=KICK_BUS_GAIN;
+  const kickDryOut=audioCtx.createGain();
+  kickDryOut.gain.value=gainNode.gain.value*dry.gain.value;
+  kickBusGain.connect(kickDryOut);kickDryOut.connect(audioCtx.destination);
+  fetch(KICK_SAMPLE_URL).then(r=>r.arrayBuffer()).then(b=>audioCtx.decodeAudioData(b))
+    .then(buf=>{kickBuffer=buf;})
+    .catch(err=>console.error('Failed to load kick sample:',err));
+  if(instrumentEnabled.kick)startKickLoop();
 
   wireSoundControls();
   ensureArea(0,0);
   initMIDI();
+  document.body.classList.add('audio-started');
+  tryLockPointer();
 }
 
+// Arp loop mirrors the kick loop's self-rescheduling timer so the arp tempo
+// (a subdivision of the kick) can change mid-loop without stuttering.
+function fireArpAndScheduleNext(){
+  if(!audioCtx||!currentChordNotes.length||!arpOsc||!arpEnv)return;
+  const note=currentChordNotes[arpStep%currentChordNotes.length]+ARP_OCTAVE_OFFSET;
+  const t=audioCtx.currentTime;
+  arpOsc.frequency.setValueAtTime(midiToFreq(note),t);
+  arpEnv.gain.cancelScheduledValues(t);
+  arpEnv.gain.setValueAtTime(0,t);
+  arpEnv.gain.linearRampToValueAtTime(ARP_PEAK_GAIN,t+ARP_ATTACK);
+  arpEnv.gain.exponentialRampToValueAtTime(0.0001,t+ARP_ATTACK+arpDecaySeconds);
+  arpEnv.gain.setValueAtTime(0,t+ARP_ATTACK+arpDecaySeconds);
+  arpStep++;
+  lastArpAt=t;
+  arpTimer=setTimeout(fireArpAndScheduleNext,arpIntervalMs);
+}
 function startArpLoop(){
-  if(arpInterval||!audioCtx)return;
+  if(arpTimer||!audioCtx)return;
   arpStep=0;
-  arpInterval=setInterval(()=>{
-    if(!audioCtx||!currentChordNotes.length||!arpOsc||!arpEnv)return;
-    const note=currentChordNotes[arpStep%currentChordNotes.length]+ARP_OCTAVE_OFFSET;
-    const t=audioCtx.currentTime;
-    arpOsc.frequency.setValueAtTime(midiToFreq(note),t);
-    arpEnv.gain.cancelScheduledValues(t);
-    arpEnv.gain.setValueAtTime(0,t);
-    arpEnv.gain.linearRampToValueAtTime(ARP_PEAK_GAIN,t+ARP_ATTACK);
-    arpEnv.gain.exponentialRampToValueAtTime(0.0001,t+ARP_ATTACK+arpDecaySeconds);
-    arpEnv.gain.setValueAtTime(0,t+ARP_ATTACK+arpDecaySeconds);
-    arpStep++;
-  },ARP_RATE_MS);
+  fireArpAndScheduleNext();
 }
 function stopArpLoop(){
-  if(arpInterval){clearInterval(arpInterval);arpInterval=null;}
+  if(arpTimer){clearTimeout(arpTimer);arpTimer=null;}
   if(audioCtx&&arpEnv){
     const t=audioCtx.currentTime;
     arpEnv.gain.cancelScheduledValues(t);
@@ -879,29 +914,89 @@ function stopArpLoop(){
     arpEnv.gain.linearRampToValueAtTime(0,t+0.03);
   }
 }
+function rescheduleArp(){
+  if(!arpTimer||!audioCtx)return;
+  clearTimeout(arpTimer);
+  const elapsedMs=(audioCtx.currentTime-lastArpAt)*1000;
+  const remaining=arpIntervalMs-elapsedMs;
+  if(remaining<=0){
+    fireArpAndScheduleNext();
+  }else{
+    arpTimer=setTimeout(fireArpAndScheduleNext,remaining);
+  }
+}
+
+function triggerKick(){
+  if(!audioCtx||!kickBuffer||!kickBusGain)return;
+  const t=audioCtx.currentTime;
+  const src=audioCtx.createBufferSource();
+  src.buffer=kickBuffer;
+  // Per-shot envelope: tiny linear fade at the end of the buffer to remove clicks.
+  const env=audioCtx.createGain();
+  const dur=kickBuffer.duration;
+  const fade=Math.min(KICK_TAIL_FADE_S,dur*0.5);
+  env.gain.setValueAtTime(1,t+Math.max(0,dur-fade));
+  env.gain.linearRampToValueAtTime(0,t+dur);
+  src.connect(env);env.connect(kickBusGain);
+  src.start(t);
+  src.stop(t+dur);
+  if(duckGain){
+    duckGain.gain.cancelScheduledValues(t);
+    duckGain.gain.setValueAtTime(duckGain.gain.value,t);
+    duckGain.gain.linearRampToValueAtTime(sidechainDuckFloor,t+SIDECHAIN_ATTACK);
+    duckGain.gain.linearRampToValueAtTime(1,t+SIDECHAIN_ATTACK+SIDECHAIN_RELEASE);
+  }
+}
+// Kick loop uses self-rescheduling setTimeout (not setInterval) so tempo
+// changes mid-loop don't reset the countdown — see rescheduleKick().
+function fireKickAndScheduleNext(){
+  if(!audioCtx)return;
+  triggerKick();
+  lastKickAt=audioCtx.currentTime;
+  // Phase-lock arp to kick: every kick beat is also an arp downbeat. If the arp
+  // already fired within the last half-interval, don't double-trigger — just
+  // shift its next fire time so it lands on the beat going forward.
+  if(arpTimer){
+    const sinceArpMs=(lastKickAt-lastArpAt)*1000;
+    clearTimeout(arpTimer);
+    if(sinceArpMs>=arpIntervalMs*0.5){
+      fireArpAndScheduleNext();
+    }else{
+      arpTimer=setTimeout(fireArpAndScheduleNext,arpIntervalMs-sinceArpMs);
+    }
+  }
+  kickTimer=setTimeout(fireKickAndScheduleNext,kickIntervalMs);
+}
+function startKickLoop(){
+  if(kickTimer||!audioCtx)return;
+  fireKickAndScheduleNext();
+}
+function stopKickLoop(){
+  if(kickTimer){clearTimeout(kickTimer);kickTimer=null;}
+  if(audioCtx&&duckGain){
+    const t=audioCtx.currentTime;
+    duckGain.gain.cancelScheduledValues(t);
+    duckGain.gain.setValueAtTime(duckGain.gain.value,t);
+    duckGain.gain.linearRampToValueAtTime(1,t+0.05);
+  }
+}
+// Re-aim the next kick at (lastKickAt + new interval). Called after tempo
+// changes so the loop accelerates/slows smoothly without missing a beat.
+function rescheduleKick(){
+  if(!kickTimer||!audioCtx)return;
+  clearTimeout(kickTimer);
+  const elapsedMs=(audioCtx.currentTime-lastKickAt)*1000;
+  const remaining=kickIntervalMs-elapsedMs;
+  if(remaining<=0){
+    fireKickAndScheduleNext();
+  }else{
+    kickTimer=setTimeout(fireKickAndScheduleNext,remaining);
+  }
+}
 
 function wireSoundControls(){
-  document.getElementById('toggle-chords').addEventListener('change',e=>{
-    if(!chordGain||!audioCtx)return;
-    const t=audioCtx.currentTime;
-    chordGain.gain.cancelScheduledValues(t);
-    chordGain.gain.setValueAtTime(chordGain.gain.value,t);
-    chordGain.gain.linearRampToValueAtTime(e.detail.on?1:0,t+ARP_TOGGLE_FADE);
-  });
-  document.getElementById('toggle-arp').addEventListener('change',e=>{
-    if(e.detail.on)startArpLoop();else stopArpLoop();
-  });
-  document.getElementById('toggle-voice').addEventListener('change',e=>{
-    setChordVoiceMode(e.detail.mode);
-  });
-  document.getElementById('knob-chord-lpf').addEventListener('change',e=>{
-    if(!chordFilter||!audioCtx)return;
-    chordFilter.frequency.setTargetAtTime(lpfKnobToHz(e.detail.value),audioCtx.currentTime,0.02);
-  });
-  document.getElementById('knob-arp-lpf').addEventListener('change',e=>{
-    if(!arpFilter||!audioCtx)return;
-    arpFilter.frequency.setTargetAtTime(lpfKnobToHz(e.detail.value),audioCtx.currentTime,0.02);
-  });
+  // Apply current XY positions to live audio nodes (chord/arp filters, kick interval).
+  applyXYParams();
   document.getElementById('knob-lfo-rate').addEventListener('change',e=>{
     if(!chordLfo||!audioCtx)return;
     chordLfo.frequency.setTargetAtTime(lfoRateKnobToHz(e.detail.value),audioCtx.currentTime,0.02);
@@ -909,9 +1004,6 @@ function wireSoundControls(){
   document.getElementById('knob-lfo-depth').addEventListener('change',e=>{
     if(!chordLfoDepth||!audioCtx)return;
     chordLfoDepth.gain.setTargetAtTime(lfoDepthKnobToCents(e.detail.value),audioCtx.currentTime,0.02);
-  });
-  document.getElementById('knob-arp-decay').addEventListener('change',e=>{
-    arpDecaySeconds=arpDecayKnobToS(e.detail.value);
   });
 }
 
@@ -929,21 +1021,6 @@ function setChord(notes){
     }
   }
   sendMIDIChord(notes);
-}
-
-function setChordVoiceMode(mode){
-  chordVoiceMode=mode;
-  if(!audioCtx||!basicMix||!vitalMix)return;
-  const t=audioCtx.currentTime;
-  const toBasic=mode==='basic';
-  const fadeUp=toBasic?VITAL_FADE_OUT:VITAL_FADE_IN;
-  const fadeDown=toBasic?VITAL_FADE_IN:VITAL_FADE_OUT;
-  basicMix.gain.cancelScheduledValues(t);
-  basicMix.gain.setValueAtTime(basicMix.gain.value,t);
-  basicMix.gain.linearRampToValueAtTime(toBasic?1:0,t+(toBasic?fadeUp:fadeDown));
-  vitalMix.gain.cancelScheduledValues(t);
-  vitalMix.gain.setValueAtTime(vitalMix.gain.value,t);
-  vitalMix.gain.linearRampToValueAtTime(toBasic?0:1,t+(toBasic?fadeDown:fadeUp));
 }
 
 async function initMIDI(){
@@ -992,13 +1069,167 @@ function sendMIDICC(channel,cc,value){
 }
 
 // ═══════════════════════════════════════
+// INSTRUMENT PANEL — single-instrument view, XY pad, cycle, toggle
+// ═══════════════════════════════════════
+function updateXYDot(x,y){
+  const dot=document.getElementById('xy-dot');
+  if(!dot)return;
+  dot.style.left=(x*100)+'%';
+  dot.style.top=((1-y)*100)+'%';
+}
+
+function applyXYParams(){
+  const cur=currentInstrument;
+  const p=xyPos[cur];
+  if(!p)return;
+  if(cur==='chords'){
+    if(audioCtx&&chordFilter){
+      chordFilter.frequency.setTargetAtTime(chordLpfHz(p.x),audioCtx.currentTime,0.02);
+    }
+  }else if(cur==='arp'){
+    if(audioCtx&&arpFilter){
+      arpFilter.frequency.setTargetAtTime(arpLpfHz(p.x),audioCtx.currentTime,0.02);
+    }
+    arpDecaySeconds=arpDecayKnobToS(p.y);
+  }else if(cur==='kick'){
+    const bpm=KICK_BPM_MIN+(KICK_BPM_MAX-KICK_BPM_MIN)*p.x;
+    kickIntervalMs=60000/bpm;
+    sidechainDuckFloor=1-p.y;
+    arpIntervalMs=kickIntervalMs/ARP_STEPS_PER_KICK;
+    rescheduleKick();
+    rescheduleArp();
+  }
+}
+
+function renderPanel(){
+  const cur=currentInstrument;
+  const enabled=instrumentEnabled[cur];
+  const idx=INSTRUMENTS.indexOf(cur);
+  const prev=INSTRUMENTS[(idx-1+INSTRUMENTS.length)%INSTRUMENTS.length];
+  const next=INSTRUMENTS[(idx+1)%INSTRUMENTS.length];
+  const prevEl=document.getElementById('prev-label');
+  const nextEl=document.getElementById('next-label');
+  const curEl=document.getElementById('current-name');
+  if(prevEl)prevEl.textContent='\u25C0 '+INSTRUMENT_LABELS[prev];
+  if(nextEl)nextEl.textContent=INSTRUMENT_LABELS[next]+' \u25B6';
+  if(curEl)curEl.textContent=INSTRUMENT_LABELS[cur];
+  const body=document.getElementById('instrument-body');
+  const xLabel=document.getElementById('axis-x-label');
+  const knobs=document.getElementById('chord-knobs');
+  const off=document.getElementById('off-state');
+  if(body)body.style.display=enabled?'':'none';
+  if(xLabel)xLabel.style.display=enabled?'':'none';
+  if(knobs)knobs.style.display=(enabled&&cur==='chords')?'':'none';
+  if(off)off.hidden=enabled;
+  if(enabled){
+    const p=xyPos[cur];
+    updateXYDot(p.x,p.y);
+  }
+}
+
+function cycleInstrument(dir){
+  const idx=INSTRUMENTS.indexOf(currentInstrument);
+  currentInstrument=INSTRUMENTS[(idx+dir+INSTRUMENTS.length)%INSTRUMENTS.length];
+  renderPanel();
+  applyXYParams();
+}
+
+function toggleCurrentInstrument(){
+  const cur=currentInstrument;
+  instrumentEnabled[cur]=!instrumentEnabled[cur];
+  applyInstrumentEnabled(cur);
+  renderPanel();
+}
+
+function applyInstrumentEnabled(cur){
+  if(!audioCtx)return;
+  const on=instrumentEnabled[cur];
+  if(cur==='chords'){
+    if(!chordGain)return;
+    const t=audioCtx.currentTime;
+    chordGain.gain.cancelScheduledValues(t);
+    chordGain.gain.setValueAtTime(chordGain.gain.value,t);
+    chordGain.gain.linearRampToValueAtTime(on?1:0,t+ARP_TOGGLE_FADE);
+  }else if(cur==='arp'){
+    if(on)startArpLoop();else stopArpLoop();
+  }else if(cur==='kick'){
+    if(on)startKickLoop();else stopKickLoop();
+  }
+}
+
+function setupXYPad(){
+  const pad=document.getElementById('xy-pad');
+  if(!pad)return;
+  function setFromEvent(e){
+    const rect=pad.getBoundingClientRect();
+    let x=(e.clientX-rect.left)/rect.width;
+    let y=1-(e.clientY-rect.top)/rect.height;
+    x=Math.max(0,Math.min(1,x));y=Math.max(0,Math.min(1,y));
+    xyPos[currentInstrument]={x,y};
+    updateXYDot(x,y);
+    applyXYParams();
+  }
+  pad.addEventListener('pointerdown',e=>{
+    if(!instrumentEnabled[currentInstrument])return;
+    pad.setPointerCapture(e.pointerId);
+    setFromEvent(e);
+    e.preventDefault();
+  });
+  pad.addEventListener('pointermove',e=>{
+    if(!pad.hasPointerCapture(e.pointerId))return;
+    setFromEvent(e);
+  });
+  const release=e=>{if(pad.hasPointerCapture(e.pointerId))pad.releasePointerCapture(e.pointerId)};
+  pad.addEventListener('pointerup',release);
+  pad.addEventListener('pointercancel',release);
+}
+
+document.getElementById('prev-label').addEventListener('click',()=>cycleInstrument(-1));
+document.getElementById('next-label').addEventListener('click',()=>cycleInstrument(1));
+setupXYPad();
+renderPanel();
+
+// Pointer Lock — hide the OS cursor and let mouse/trackpad movement drive the
+// XY dot directly. Without lock, the cursor would hit the screen edge and stop;
+// with it, we get unbounded relative deltas via movementX/Y.
+let pointerLocked=false;
+function tryLockPointer(){
+  if(document.pointerLockElement)return;
+  const r=document.body.requestPointerLock&&document.body.requestPointerLock({unadjustedMovement:true});
+  if(r&&typeof r.catch==='function')r.catch(()=>{
+    try{document.body.requestPointerLock&&document.body.requestPointerLock();}catch(_){}
+  });
+}
+document.addEventListener('pointerlockchange',()=>{
+  pointerLocked=document.pointerLockElement===document.body;
+});
+document.addEventListener('mousemove',e=>{
+  if(!pointerLocked)return;
+  if(!instrumentEnabled[currentInstrument])return;
+  const p=xyPos[currentInstrument];
+  p.x=Math.max(0,Math.min(1,p.x+e.movementX*POINTER_SENSITIVITY));
+  p.y=Math.max(0,Math.min(1,p.y-e.movementY*POINTER_SENSITIVITY));
+  updateXYDot(p.x,p.y);
+  applyXYParams();
+});
+// Re-acquire lock on click (browsers drop pointer lock when Esc is pressed).
+document.addEventListener('click',()=>{if(started)tryLockPointer();});
+
+// ═══════════════════════════════════════
 // CAR & INPUT
 // ═══════════════════════════════════════
 const centerPx=hexToPixel(0,0);
 const car={x:centerPx.x,y:centerPx.y+60,angle:-Math.PI/2,vx:0,vy:0,speed:0};
 const keyState={};
-window.addEventListener('keydown',e=>{keyState[e.key.toLowerCase()]=true;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))e.preventDefault()});
-window.addEventListener('keyup',e=>keyState[e.key.toLowerCase()]=false);
+window.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();
+  if(k==='arrowleft'){cycleInstrument(-1);return}
+  if(k==='arrowright'){cycleInstrument(1);return}
+  if(k===' '){toggleCurrentInstrument();return}
+  keyState[k]=true;
+});
+window.addEventListener('keyup',e=>{keyState[e.key.toLowerCase()]=false});
 
 // ═══════════════════════════════════════
 // CANVAS & CLICK
@@ -1057,7 +1288,7 @@ function selectTile(tile){
 }
 
 canvas.addEventListener('click',e=>{
-  if(!started)return;
+  if(!started||pointerLocked)return;
   const wx=e.clientX+(car.x-window.innerWidth/2);
   const wy=e.clientY+(car.y-window.innerHeight/2);
   const hex=pixelToHex(wx,wy);
@@ -1082,8 +1313,8 @@ const ACCEL=280,FRIC=0.97,TURNSPD=3,MAXSPD=220;
 
 function update(now){
   const dt=Math.min((now-lastTime)/1000,0.05);lastTime=now;
-  const up=keyState['w']||keyState['arrowup'],dn=keyState['s']||keyState['arrowdown'];
-  const lt=keyState['a']||keyState['arrowleft'],rt=keyState['d']||keyState['arrowright'];
+  const up=keyState['w'],dn=keyState['s'];
+  const lt=keyState['a'],rt=keyState['d'];
   if(lt)car.angle-=TURNSPD*dt;if(rt)car.angle+=TURNSPD*dt;
   if(up){car.vx+=Math.cos(car.angle)*ACCEL*dt;car.vy+=Math.sin(car.angle)*ACCEL*dt}
   if(dn){car.vx-=Math.cos(car.angle)*ACCEL*dt*0.5;car.vy-=Math.sin(car.angle)*ACCEL*dt*0.5}
