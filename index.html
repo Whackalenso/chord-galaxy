@@ -43,9 +43,10 @@
   .knob .tick{stroke:#eee;stroke-width:2;stroke-linecap:round}
   .knob-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;opacity:.5;text-align:center;line-height:1.3}
   #controls-hint{position:fixed;bottom:12px;left:12px;z-index:20;display:flex;flex-direction:column;gap:4px;pointer-events:none;font:10px 'Courier New',monospace;color:#aaa;opacity:.5}
-  #controls-hint .hint-row{display:flex;align-items:center;gap:8px}
-  #controls-hint .key{display:inline-block;min-width:48px;letter-spacing:2px;text-transform:uppercase;border:1px solid #444;padding:2px 6px;text-align:center;color:#ddd;background:rgba(20,20,20,.5)}
-  #controls-hint .desc{letter-spacing:2px;text-transform:uppercase;opacity:.85}
+  .hint-row{display:flex;align-items:center;gap:8px}
+  .key{display:inline-block;min-width:48px;letter-spacing:2px;text-transform:uppercase;border:1px solid #444;padding:2px 6px;text-align:center;color:#ddd;background:rgba(20,20,20,.5)}
+  .desc{letter-spacing:2px;text-transform:uppercase;opacity:.85}
+  #chord-page-hint{font:10px 'Courier New',monospace;color:#aaa;opacity:.5;padding-top:6px;justify-content:center}
 </style>
 </head>
 <body>
@@ -82,6 +83,9 @@
     </div>
   </div>
   <div id="axis-x-label" class="axis-x-label">Filter Cutoff</div>
+  <div id="chord-page-hint" class="hint-row">
+    <span class="key">&#9650; &#9660;</span><span class="desc">Cycle Parameters</span>
+  </div>
   <div id="off-state" hidden>OFF</div>
 </div>
 <script>
@@ -99,8 +103,8 @@ const DEFAULT_ARP_X=0.2;        // arp LPF cutoff (mapped LPF_ARP_MIN_HZ..LPF_AR
 const DEFAULT_ARP_Y=0.5;        // arp decay (mapped via arpDecayKnobToS)
 const DEFAULT_KICK_X=0.4;       // kick tempo (mapped to KICK_BPM_MIN..KICK_BPM_MAX)
 const DEFAULT_KICK_Y=0.4;       // kick sidechain depth (0 = no pumping, 1 = full)
-const DEFAULT_LFO_RATE=0.5;     // chord LFO rate (fixed; no UI knob)
-const DEFAULT_LFO_DEPTH=0.15;   // chord LFO depth (fixed; no UI knob)
+const DEFAULT_LFO_RATE=0.5;     // chord LFO page X starting position (rate)
+const DEFAULT_LFO_DEPTH=0.15;   // chord LFO page Y starting position (depth)
 const POINTER_SENSITIVITY=1/180;// pad fraction per pixel of locked-pointer movement
 const MIDI_ENABLED=false;       // master switch for external MIDI output (picker UI + note/CC sending)
 if(!MIDI_ENABLED){const _midiRow=document.getElementById('midi-row');if(_midiRow)_midiRow.remove();}
@@ -752,7 +756,8 @@ const INSTRUMENTS=['chords','arp','kick'];
 const INSTRUMENT_LABELS={chords:'Chords',arp:'Arp',kick:'Kick'};
 // Per-instrument axis labels — what each axis of the XY pad controls.
 const AXIS_LABELS={
-  chords:{x:'Filter Cutoff',y:'Resonance'},
+  'chords:filter':{x:'Filter Cutoff',y:'Resonance'},
+  'chords:lfo':{x:'LFO Rate',y:'LFO Depth'},
   arp:{x:'Filter Cutoff',y:'Sustain'},
   kick:{x:'Tempo',y:'Sidechain'},
 };
@@ -762,11 +767,18 @@ const instrumentEnabled={
   arp:DEFAULT_ARP_ENABLED,
   kick:DEFAULT_KICK_ENABLED,
 };
+// Chord pad has two parameter pages cycled with up/down arrows; arp/kick are single-page.
+const CHORD_PAGES=['filter','lfo'];
+let chordPage='filter';
 const xyPos={
-  chords:{x:DEFAULT_CHORDS_X,y:DEFAULT_CHORDS_Y},
+  'chords:filter':{x:DEFAULT_CHORDS_X,y:DEFAULT_CHORDS_Y},
+  'chords:lfo':{x:DEFAULT_LFO_RATE,y:DEFAULT_LFO_DEPTH},
   arp:{x:DEFAULT_ARP_X,y:DEFAULT_ARP_Y},
   kick:{x:DEFAULT_KICK_X,y:DEFAULT_KICK_Y},
 };
+function activePadKey(){
+  return currentInstrument==='chords'?`chords:${chordPage}`:currentInstrument;
+}
 let kickIntervalMs=60000/(KICK_BPM_MIN+(KICK_BPM_MAX-KICK_BPM_MIN)*xyPos.kick.x);
 let sidechainDuckFloor=1-xyPos.kick.y;
 arpIntervalMs=kickIntervalMs/ARP_STEPS_PER_KICK;
@@ -788,8 +800,8 @@ function startAudio(){
 
   // Chord bus: (basicMix | vitalChain) → chordFilter (lowpass) → chordGain (toggle mute) → master
   chordFilter=audioCtx.createBiquadFilter();
-  chordFilter.type='lowpass';chordFilter.Q.value=chordQ(xyPos.chords.y);
-  chordFilter.frequency.value=chordLpfHz(xyPos.chords.x);
+  chordFilter.type='lowpass';chordFilter.Q.value=chordQ(xyPos['chords:filter'].y);
+  chordFilter.frequency.value=chordLpfHz(xyPos['chords:filter'].x);
   chordGain=audioCtx.createGain();
   chordGain.gain.value=instrumentEnabled.chords?1:0;
   // duckGain — shared sidechain target; kick triggers ramp this down then back up
@@ -800,9 +812,9 @@ function startAudio(){
   // LFO modulating chord filter cutoff (sums into chordFilter.detune in cents)
   chordLfo=audioCtx.createOscillator();
   chordLfo.type=LFO_WAVE;
-  chordLfo.frequency.value=lfoRateKnobToHz(DEFAULT_LFO_RATE);
+  chordLfo.frequency.value=lfoRateKnobToHz(xyPos['chords:lfo'].x);
   chordLfoDepth=audioCtx.createGain();
-  chordLfoDepth.gain.value=lfoDepthKnobToCents(DEFAULT_LFO_DEPTH);
+  chordLfoDepth.gain.value=lfoDepthKnobToCents(xyPos['chords:lfo'].y);
   chordLfo.connect(chordLfoDepth);chordLfoDepth.connect(chordFilter.detune);
   chordLfo.start();
 
@@ -1072,12 +1084,18 @@ function updateXYDot(x,y){
 
 function applyXYParams(){
   const cur=currentInstrument;
-  const p=xyPos[cur];
+  const p=xyPos[activePadKey()];
   if(!p)return;
   if(cur==='chords'){
-    if(audioCtx&&chordFilter){
-      chordFilter.frequency.setTargetAtTime(chordLpfHz(p.x),audioCtx.currentTime,0.02);
-      chordFilter.Q.setTargetAtTime(chordQ(p.y),audioCtx.currentTime,0.02);
+    if(!audioCtx)return;
+    if(chordPage==='filter'){
+      if(chordFilter){
+        chordFilter.frequency.setTargetAtTime(chordLpfHz(p.x),audioCtx.currentTime,0.02);
+        chordFilter.Q.setTargetAtTime(chordQ(p.y),audioCtx.currentTime,0.02);
+      }
+    }else{
+      if(chordLfo)chordLfo.frequency.setTargetAtTime(lfoRateKnobToHz(p.x),audioCtx.currentTime,0.02);
+      if(chordLfoDepth)chordLfoDepth.gain.setTargetAtTime(lfoDepthKnobToCents(p.y),audioCtx.currentTime,0.02);
     }
   }else if(cur==='arp'){
     if(audioCtx&&arpFilter){
@@ -1110,14 +1128,17 @@ function renderPanel(){
   const xLabel=document.getElementById('axis-x-label');
   const yLabel=document.getElementById('axis-y-label');
   const off=document.getElementById('off-state');
-  const axes=AXIS_LABELS[cur]||{x:'',y:''};
+  const pageHint=document.getElementById('chord-page-hint');
+  const padKey=activePadKey();
+  const axes=AXIS_LABELS[padKey]||{x:'',y:''};
   if(xLabel)xLabel.textContent=axes.x;
   if(yLabel)yLabel.textContent=axes.y;
   if(body)body.style.display=enabled?'':'none';
   if(xLabel)xLabel.style.display=enabled?'':'none';
+  if(pageHint)pageHint.style.display=(enabled&&cur==='chords')?'':'none';
   if(off)off.hidden=enabled;
   if(enabled){
-    const p=xyPos[cur];
+    const p=xyPos[padKey];
     updateXYDot(p.x,p.y);
   }
 }
@@ -1125,6 +1146,14 @@ function renderPanel(){
 function cycleInstrument(dir){
   const idx=INSTRUMENTS.indexOf(currentInstrument);
   currentInstrument=INSTRUMENTS[(idx+dir+INSTRUMENTS.length)%INSTRUMENTS.length];
+  renderPanel();
+  applyXYParams();
+}
+
+function cycleChordPage(dir){
+  if(currentInstrument!=='chords')return;
+  const idx=CHORD_PAGES.indexOf(chordPage);
+  chordPage=CHORD_PAGES[(idx+dir+CHORD_PAGES.length)%CHORD_PAGES.length];
   renderPanel();
   applyXYParams();
 }
@@ -1160,7 +1189,7 @@ function setupXYPad(){
     let x=(e.clientX-rect.left)/rect.width;
     let y=1-(e.clientY-rect.top)/rect.height;
     x=Math.max(0,Math.min(1,x));y=Math.max(0,Math.min(1,y));
-    xyPos[currentInstrument]={x,y};
+    xyPos[activePadKey()]={x,y};
     updateXYDot(x,y);
     applyXYParams();
   }
@@ -1201,7 +1230,7 @@ document.addEventListener('pointerlockchange',()=>{
 document.addEventListener('mousemove',e=>{
   if(!pointerLocked)return;
   if(!instrumentEnabled[currentInstrument])return;
-  const p=xyPos[currentInstrument];
+  const p=xyPos[activePadKey()];
   p.x=Math.max(0,Math.min(1,p.x+e.movementX*POINTER_SENSITIVITY));
   p.y=Math.max(0,Math.min(1,p.y-e.movementY*POINTER_SENSITIVITY));
   updateXYDot(p.x,p.y);
@@ -1221,6 +1250,8 @@ window.addEventListener('keydown',e=>{
   if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();
   if(k==='arrowleft'){cycleInstrument(-1);return}
   if(k==='arrowright'){cycleInstrument(1);return}
+  if(k==='arrowup'){cycleChordPage(1);return}
+  if(k==='arrowdown'){cycleChordPage(-1);return}
   if(k===' '){toggleCurrentInstrument();return}
   keyState[k]=true;
 });
