@@ -63,6 +63,11 @@
       <span>Arp</span><span class="indicator">&#9675;</span>
     </button>
   </div>
+  <div class="toggle-row">
+    <button id="toggle-voice" class="sound-toggle mode-toggle on" type="button" data-mode="basic">
+      <span>Voice</span><span class="voice-label">Basic</span>
+    </button>
+  </div>
   <div class="knob-row">
     <div class="knob-cell">
       <div id="knob-chord-lpf" class="knob" data-value="1" role="slider" aria-label="Chord low-pass filter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1">
@@ -85,19 +90,63 @@
       <div class="knob-label">LPF<br>Arp</div>
     </div>
   </div>
+  <div class="knob-row">
+    <div class="knob-cell">
+      <div id="knob-lfo-rate" class="knob" data-value="0.3" role="slider" aria-label="Chord LPF LFO rate" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.3">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="15"></circle>
+          <path class="arc" d=""></path>
+          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
+        </svg>
+      </div>
+      <div class="knob-label">LFO<br>Rate</div>
+    </div>
+    <div class="knob-cell">
+      <div id="knob-lfo-depth" class="knob" data-value="0" role="slider" aria-label="Chord LPF LFO depth" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="15"></circle>
+          <path class="arc" d=""></path>
+          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
+        </svg>
+      </div>
+      <div class="knob-label">LFO<br>Depth</div>
+    </div>
+  </div>
+  <div class="knob-row">
+    <div class="knob-cell">
+      <div id="knob-arp-decay" class="knob" data-value="0.51" role="slider" aria-label="Arpeggiator decay time" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.51">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="15"></circle>
+          <path class="arc" d=""></path>
+          <line class="tick" x1="20" y1="20" x2="20" y2="8"></line>
+        </svg>
+      </div>
+      <div class="knob-label">Arp<br>Decay</div>
+    </div>
+  </div>
 </div>
 <script>
 // ═══════════════════════════════════════
-// SOUND CONTROLS UI (visual only — not wired to audio yet)
+// SOUND CONTROLS UI (toggle/knob input — audio side is wired in startAudio)
 // ═══════════════════════════════════════
 (function(){
-  document.querySelectorAll('.sound-toggle').forEach(btn=>{
+  document.querySelectorAll('.sound-toggle:not(.mode-toggle)').forEach(btn=>{
     btn.addEventListener('click',()=>{
       const on=btn.classList.toggle('on');
       btn.setAttribute('aria-pressed',on?'true':'false');
       const ind=btn.querySelector('.indicator');
       if(ind)ind.innerHTML=on?'&#9679;':'&#9675;';
       btn.dispatchEvent(new CustomEvent('change',{bubbles:true,detail:{on}}));
+    });
+  });
+  document.querySelectorAll('.mode-toggle').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const cur=btn.dataset.mode||'basic';
+      const next=cur==='basic'?'vital':'basic';
+      btn.dataset.mode=next;
+      const lbl=btn.querySelector('.voice-label');
+      if(lbl)lbl.textContent=next.charAt(0).toUpperCase()+next.slice(1);
+      btn.dispatchEvent(new CustomEvent('change',{bubbles:true,detail:{mode:next}}));
     });
   });
   const SWEEP=270,START=-225;
@@ -661,8 +710,56 @@ function noteDiff(a,b){let d=0;for(let i=0;i<a.length;i++)if(a[i]!==b[i])d++;ret
 // AUDIO
 // ═══════════════════════════════════════
 const GLIDE_TIME=0.4;
+
+// Low-pass filter mapping (shared by chord & arp filter knobs)
+// Knob value 0..1 maps log-scale onto LPF_MIN_HZ..LPF_MAX_HZ
+const LPF_MIN_HZ=80;
+const LPF_MAX_HZ=18000;
+const LPF_Q=0.7;
+
+// Chord LPF LFO — modulates chordFilter.detune (cents). 0 cents = unmodulated;
+// ±1200 = ±1 octave from the knob-set base cutoff.
+const LFO_WAVE='sine';
+const LFO_RATE_MIN_HZ=0.05;       // knob value 0
+const LFO_RATE_MAX_HZ=12;         // knob value 1
+const LFO_DEPTH_MAX_CENTS=2400;   // knob value 1 → ±2 octaves of cutoff sweep
+
+// Arpeggiator synth — sawtooth osc with attack/decay envelope (no sustain)
+const ARP_OSC_TYPE='sawtooth';
+const ARP_RATE_MS=150;            // ms between notes (step duration)
+const ARP_ATTACK=0.005;           // env attack, seconds
+const ARP_DECAY_MIN_S=0.02;       // decay knob value 0 → very plucky
+const ARP_DECAY_MAX_S=1.5;        // decay knob value 1 → long sustaining
+const ARP_PEAK_GAIN=0.6;          // env peak amplitude (pre-bus)
+const ARP_BUS_GAIN=0.22;          // arp bus level into master
+const ARP_DETUNE=0;               // cents
+const ARP_OCTAVE_OFFSET=0;       // semitones added to each chord note
+const ARP_TOGGLE_FADE=0.03;       // chord toggle fade time, seconds
+
+// Vital-preset pad (approximation of chords-vital-preset.vital — single saw osc,
+// 4-voice unison, lowpass filter ≈170 Hz, slow attack. No FX active in source preset.)
+const VITAL_OSC_TYPE='sawtooth';
+const VITAL_UNISON=4;             // unison oscillators per voice
+const VITAL_UNISON_DETUNE=18;     // cents — symmetric spread (±)
+const VITAL_FILTER_HZ=20000;        // from preset filter_1_cutoff (~52.78 Vital MIDI scale)
+const VITAL_FILTER_Q=0.7;
+const VITAL_VOICE_LEVEL=0.55;     // per-voice trim (4×5 oscillators is loud)
+const VITAL_FADE_IN=0.22;         // matches preset env_1_attack
+const VITAL_FADE_OUT=0.55;        // matches preset env_1_release
+
 function midiToFreq(m){return 440*Math.pow(2,(m-69)/12)}
+function lpfKnobToHz(v){return LPF_MIN_HZ*Math.pow(LPF_MAX_HZ/LPF_MIN_HZ,Math.max(0,Math.min(1,v)))}
+function lfoRateKnobToHz(v){return LFO_RATE_MIN_HZ*Math.pow(LFO_RATE_MAX_HZ/LFO_RATE_MIN_HZ,Math.max(0,Math.min(1,v)))}
+function lfoDepthKnobToCents(v){return Math.max(0,Math.min(1,v))*LFO_DEPTH_MAX_CENTS}
+function arpDecayKnobToS(v){return ARP_DECAY_MIN_S*Math.pow(ARP_DECAY_MAX_S/ARP_DECAY_MIN_S,Math.max(0,Math.min(1,v)))}
+
 let audioCtx=null,voices=[],gainNode=null,started=false;
+let chordFilter=null,chordGain=null,chordLfo=null,chordLfoDepth=null;
+let basicMix=null,vitalMix=null,vitalFilter=null,vitalVoices=[];
+let chordVoiceMode='basic';
+let arpOsc=null,arpEnv=null,arpFilter=null,arpBusGain=null;
+let currentChordNotes=[48,52,55,60,67];
+let arpStep=0,arpInterval=null,arpDecaySeconds=0.18;
 let midiOutput=null,prevMidiNotes=[];
 
 function startAudio(){
@@ -679,7 +776,36 @@ function startAudio(){
   const wet=audioCtx.createGain();wet.gain.value=0.55;
   gainNode.connect(dry);dry.connect(audioCtx.destination);
   gainNode.connect(rev);rev.connect(wet);wet.connect(audioCtx.destination);
+
+  // Chord bus: (basicMix | vitalChain) → chordFilter (lowpass) → chordGain (toggle mute) → master
+  chordFilter=audioCtx.createBiquadFilter();
+  chordFilter.type='lowpass';chordFilter.Q.value=LPF_Q;
+  chordFilter.frequency.value=lpfKnobToHz(parseFloat(document.getElementById('knob-chord-lpf').dataset.value));
+  chordGain=audioCtx.createGain();
+  chordGain.gain.value=document.getElementById('toggle-chords').classList.contains('on')?1:0;
+  chordFilter.connect(chordGain);chordGain.connect(gainNode);
+
+  // LFO modulating chord filter cutoff (sums into chordFilter.detune in cents)
+  chordLfo=audioCtx.createOscillator();
+  chordLfo.type=LFO_WAVE;
+  chordLfo.frequency.value=lfoRateKnobToHz(parseFloat(document.getElementById('knob-lfo-rate').dataset.value));
+  chordLfoDepth=audioCtx.createGain();
+  chordLfoDepth.gain.value=lfoDepthKnobToCents(parseFloat(document.getElementById('knob-lfo-depth').dataset.value));
+  chordLfo.connect(chordLfoDepth);chordLfoDepth.connect(chordFilter.detune);
+  chordLfo.start();
+
+  // Voice-mode crossfade buses
+  chordVoiceMode=document.getElementById('toggle-voice').dataset.mode||'basic';
+  basicMix=audioCtx.createGain();basicMix.gain.value=chordVoiceMode==='basic'?1:0;
+  basicMix.connect(chordFilter);
+  vitalMix=audioCtx.createGain();vitalMix.gain.value=chordVoiceMode==='vital'?1:0;
+  vitalFilter=audioCtx.createBiquadFilter();
+  vitalFilter.type='lowpass';vitalFilter.frequency.value=VITAL_FILTER_HZ;vitalFilter.Q.value=VITAL_FILTER_Q;
+  vitalFilter.connect(vitalMix);vitalMix.connect(chordFilter);
+
   const SEED=[48,52,55,60,67];
+  currentChordNotes=SEED.slice();
+  // Basic voice: sine + detuned triangle per voice
   for(let i=0;i<NUM_VOICES;i++){
     const o1=audioCtx.createOscillator(),o2=audioCtx.createOscillator();
     const vg=audioCtx.createGain();
@@ -687,23 +813,137 @@ function startAudio(){
     const g1=audioCtx.createGain(),g2=audioCtx.createGain();
     g1.gain.value=0.65;g2.gain.value=0.35;
     o1.connect(g1);o2.connect(g2);g1.connect(vg);g2.connect(vg);
-    vg.gain.value=1/NUM_VOICES;vg.connect(gainNode);
+    vg.gain.value=1/NUM_VOICES;vg.connect(basicMix);
     const f=midiToFreq(SEED[i]);o1.frequency.value=f;o2.frequency.value=f;o1.start();o2.start();
     voices.push({osc1:o1,osc2:o2,currentMidi:SEED[i]});
   }
+  // Vital pad voice: 4 unison sawtooth oscs per voice → vitalFilter
+  const halfSpread=VITAL_UNISON_DETUNE;
+  for(let i=0;i<NUM_VOICES;i++){
+    const vg=audioCtx.createGain();
+    vg.gain.value=(1/NUM_VOICES)*VITAL_VOICE_LEVEL;
+    vg.connect(vitalFilter);
+    const oscs=[];
+    const f=midiToFreq(SEED[i]);
+    for(let u=0;u<VITAL_UNISON;u++){
+      const o=audioCtx.createOscillator();
+      o.type=VITAL_OSC_TYPE;
+      o.detune.value=VITAL_UNISON===1?0:(-halfSpread+(2*halfSpread*u/(VITAL_UNISON-1)));
+      o.frequency.value=f;
+      o.connect(vg);o.start();
+      oscs.push(o);
+    }
+    vitalVoices.push({oscs,currentMidi:SEED[i]});
+  }
+
+  // Arpeggiator: sawtooth osc → arpEnv (per-note A/D) → arpFilter (lowpass) → arpBusGain → master
+  arpOsc=audioCtx.createOscillator();
+  arpOsc.type=ARP_OSC_TYPE;arpOsc.detune.value=ARP_DETUNE;
+  arpEnv=audioCtx.createGain();arpEnv.gain.value=0;
+  arpFilter=audioCtx.createBiquadFilter();
+  arpFilter.type='lowpass';arpFilter.Q.value=LPF_Q;
+  arpFilter.frequency.value=lpfKnobToHz(parseFloat(document.getElementById('knob-arp-lpf').dataset.value));
+  arpBusGain=audioCtx.createGain();arpBusGain.gain.value=ARP_BUS_GAIN;
+  arpOsc.connect(arpEnv);arpEnv.connect(arpFilter);arpFilter.connect(arpBusGain);arpBusGain.connect(gainNode);
+  arpDecaySeconds=arpDecayKnobToS(parseFloat(document.getElementById('knob-arp-decay').dataset.value));
+  arpOsc.start();
+  if(document.getElementById('toggle-arp').classList.contains('on'))startArpLoop();
+
+  wireSoundControls();
   ensureArea(0,0);
   initMIDI();
 }
 
+function startArpLoop(){
+  if(arpInterval||!audioCtx)return;
+  arpStep=0;
+  arpInterval=setInterval(()=>{
+    if(!audioCtx||!currentChordNotes.length||!arpOsc||!arpEnv)return;
+    const note=currentChordNotes[arpStep%currentChordNotes.length]+ARP_OCTAVE_OFFSET;
+    const t=audioCtx.currentTime;
+    arpOsc.frequency.setValueAtTime(midiToFreq(note),t);
+    arpEnv.gain.cancelScheduledValues(t);
+    arpEnv.gain.setValueAtTime(0,t);
+    arpEnv.gain.linearRampToValueAtTime(ARP_PEAK_GAIN,t+ARP_ATTACK);
+    arpEnv.gain.exponentialRampToValueAtTime(0.0001,t+ARP_ATTACK+arpDecaySeconds);
+    arpEnv.gain.setValueAtTime(0,t+ARP_ATTACK+arpDecaySeconds);
+    arpStep++;
+  },ARP_RATE_MS);
+}
+function stopArpLoop(){
+  if(arpInterval){clearInterval(arpInterval);arpInterval=null;}
+  if(audioCtx&&arpEnv){
+    const t=audioCtx.currentTime;
+    arpEnv.gain.cancelScheduledValues(t);
+    arpEnv.gain.setValueAtTime(arpEnv.gain.value,t);
+    arpEnv.gain.linearRampToValueAtTime(0,t+0.03);
+  }
+}
+
+function wireSoundControls(){
+  document.getElementById('toggle-chords').addEventListener('change',e=>{
+    if(!chordGain||!audioCtx)return;
+    const t=audioCtx.currentTime;
+    chordGain.gain.cancelScheduledValues(t);
+    chordGain.gain.setValueAtTime(chordGain.gain.value,t);
+    chordGain.gain.linearRampToValueAtTime(e.detail.on?1:0,t+ARP_TOGGLE_FADE);
+  });
+  document.getElementById('toggle-arp').addEventListener('change',e=>{
+    if(e.detail.on)startArpLoop();else stopArpLoop();
+  });
+  document.getElementById('toggle-voice').addEventListener('change',e=>{
+    setChordVoiceMode(e.detail.mode);
+  });
+  document.getElementById('knob-chord-lpf').addEventListener('change',e=>{
+    if(!chordFilter||!audioCtx)return;
+    chordFilter.frequency.setTargetAtTime(lpfKnobToHz(e.detail.value),audioCtx.currentTime,0.02);
+  });
+  document.getElementById('knob-arp-lpf').addEventListener('change',e=>{
+    if(!arpFilter||!audioCtx)return;
+    arpFilter.frequency.setTargetAtTime(lpfKnobToHz(e.detail.value),audioCtx.currentTime,0.02);
+  });
+  document.getElementById('knob-lfo-rate').addEventListener('change',e=>{
+    if(!chordLfo||!audioCtx)return;
+    chordLfo.frequency.setTargetAtTime(lfoRateKnobToHz(e.detail.value),audioCtx.currentTime,0.02);
+  });
+  document.getElementById('knob-lfo-depth').addEventListener('change',e=>{
+    if(!chordLfoDepth||!audioCtx)return;
+    chordLfoDepth.gain.setTargetAtTime(lfoDepthKnobToCents(e.detail.value),audioCtx.currentTime,0.02);
+  });
+  document.getElementById('knob-arp-decay').addEventListener('change',e=>{
+    arpDecaySeconds=arpDecayKnobToS(e.detail.value);
+  });
+}
+
 function setChord(notes){
+  currentChordNotes=notes.slice();
   if(!audioCtx||!voices.length)return;const t=audioCtx.currentTime;
   for(let i=0;i<NUM_VOICES;i++){
     const f=midiToFreq(notes[i]);
     voices[i].osc1.frequency.linearRampToValueAtTime(f,t+GLIDE_TIME);
     voices[i].osc2.frequency.linearRampToValueAtTime(f,t+GLIDE_TIME);
     voices[i].currentMidi=notes[i];
+    if(vitalVoices[i]){
+      for(const o of vitalVoices[i].oscs)o.frequency.linearRampToValueAtTime(f,t+GLIDE_TIME);
+      vitalVoices[i].currentMidi=notes[i];
+    }
   }
   sendMIDIChord(notes);
+}
+
+function setChordVoiceMode(mode){
+  chordVoiceMode=mode;
+  if(!audioCtx||!basicMix||!vitalMix)return;
+  const t=audioCtx.currentTime;
+  const toBasic=mode==='basic';
+  const fadeUp=toBasic?VITAL_FADE_OUT:VITAL_FADE_IN;
+  const fadeDown=toBasic?VITAL_FADE_IN:VITAL_FADE_OUT;
+  basicMix.gain.cancelScheduledValues(t);
+  basicMix.gain.setValueAtTime(basicMix.gain.value,t);
+  basicMix.gain.linearRampToValueAtTime(toBasic?1:0,t+(toBasic?fadeUp:fadeDown));
+  vitalMix.gain.cancelScheduledValues(t);
+  vitalMix.gain.setValueAtTime(vitalMix.gain.value,t);
+  vitalMix.gain.linearRampToValueAtTime(toBasic?0:1,t+(toBasic?fadeDown:fadeUp));
 }
 
 async function initMIDI(){
