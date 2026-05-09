@@ -2,6 +2,8 @@
 
 Interactive website for exploring musical chords. 
 
+https://github.com/user-attachments/assets/4c2524e0-67a9-4df1-b7fc-2d176ed7ec30
+
 <b>Controls:</b>
 * WASD - Fly spaceship
 * Space - Toggle current instrument on/off
@@ -12,13 +14,13 @@ Interactive website for exploring musical chords.
 
 As you fly a spaceship around the map, each new spot you visit will play a new chord. Revisiting the same spot will play the same chord associated with that spot. The boundaries for these "spots" are hidden, but underlying the entire map is made up of connected hexogonal tiles.
 
-> <b>Planets</b> <br>
-> Planets are spots on the map where the game decides on a specific chord to associate with that spot before it decides on the neighboring chords. Planets can have these chord types:
-> * Tonic
-> * Secondary dominant
-> * Parallel minor
-> * Neighbor key
-> * Evil
+<b>Planets</b> <br>
+Planets are spots on the map where the game decides on a specific chord to associate with that spot before it decides on the neighboring chords. Planets can have these chord types:
+* Tonic
+* Secondary dominant
+* Parallel minor
+* Neighbor key
+* Evil
 
 When the game first loads, it places tonic planet at the center tile, and a few random planets near the player. To pick what chords play on nearby tiles to the player, the program runs this algorithm for each tile:
 1. Runs a breadth-first-search from the tile to find the nearest planet.
